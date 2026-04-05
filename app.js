@@ -14,8 +14,8 @@ const SHIFTS = {
   'P':  { name:'Tarde',       h:8.5,  color:'#8b5cf6', text:'#fff',    period:'afternoon' },
   'PF': { name:'Tarde Feriado',h:10,  color:'#a78bfa', text:'#fff',    period:'afternoon' },
   'N':  { name:'Noite',       h:9,    color:'#1e1b4b', text:'#fff',    period:'night'   },
-  'OFF':{ name:'Folga',       h:0,    color:'#334155', text:'#94a3b8', period:'off'     },
-  'FE': { name:'Férias',      h:0,    color:'#10b981', text:'#fff',    period:'off'     },
+  'OFF':{ name: 'Folga', h: 0, color: 'rgba(255,255,255,0.03)', text: 'rgba(255,255,255,0.2)', period:'off' },
+  'FE': { name: 'Férias', h: 0, color: '#10b981', text: '#fff', period:'off' },
   'AT': { name:'Atestado',    h:0,    color:'#ef4444', text:'#fff',    period:'off'     },
 };
 

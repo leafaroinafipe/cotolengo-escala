@@ -7,20 +7,20 @@
 const GOOGLE_API_URL = 'https://script.google.com/macros/s/AKfycbz-qW0XE6R5iWSrBkMp79y_F6FIAAUqpUH6nhBkUUwK15HbYoksp3fl6B-UDWZJxLL2oQ/exec';
 
 const SHIFTS = {
-  'M1': { name:'Manhã 1',     h:7.0,  color:'#f59e0b', text:'#1a1a00', period:'morning' },
-  'M2': { name:'Manhã 2',     h:4.5,  color:'#fcd34d', text:'#1a1a00', period:'morning' },
-  'MF': { name:'Manhã Feriado',h:7.5, color:'#f97316', text:'#fff',    period:'morning' },
-  'G':  { name:'Jornada',     h:9.5,  color:'#0ea5e9', text:'#fff',    period:'morning' },
-  'P':  { name:'Tarde',       h:8.5,  color:'#8b5cf6', text:'#fff',    period:'afternoon' },
-  'PF': { name:'Tarde Feriado',h:10,  color:'#a78bfa', text:'#fff',    period:'afternoon' },
-  'N':  { name:'Noite',       h:9,    color:'#1e1b4b', text:'#fff',    period:'night'   },
-  'OFF':{ name: 'Folga', h: 0, color: 'rgba(255,255,255,0.03)', text: 'rgba(255,255,255,0.2)', period:'off' },
-  'FE': { name: 'Férias', h: 0, color: '#10b981', text: '#fff', period:'off' },
-  'AT': { name:'Atestado',    h:0,    color:'#ef4444', text:'#fff',    period:'off'     },
+  'M1': { name:'Mattina 1',     h:7.0,  color:'#f59e0b', text:'#1a1a00', period:'morning' },
+  'M2': { name:'Mattina 2',     h:4.5,  color:'#fcd34d', text:'#1a1a00', period:'morning' },
+  'MF': { name:'Mattina Festivo',h:7.5, color:'#f97316', text:'#fff',    period:'morning' },
+  'G':  { name:'Giornata',     h:9.5,  color:'#0ea5e9', text:'#fff',    period:'morning' },
+  'P':  { name:'Pomeriggio',       h:8.5,  color:'#8b5cf6', text:'#fff',    period:'afternoon' },
+  'PF': { name:'Pomeriggio Festivo',h:10,  color:'#a78bfa', text:'#fff',    period:'afternoon' },
+  'N':  { name:'Notte',       h:9,    color:'#1e1b4b', text:'#fff',    period:'night'   },
+  'OFF':{ name: 'Riposo', h: 0, color: 'rgba(255,255,255,0.03)', text: 'rgba(255,255,255,0.2)', period:'off' },
+  'FE': { name: 'Ferie', h: 0, color: '#10b981', text: '#fff', period:'off' },
+  'AT': { name:'Certificato',    h:0,    color:'#ef4444', text:'#fff',    period:'off'     },
 };
 
-const MONTH_NAMES = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
-const DAY_NAMES = ['D','S','T','Q','Q','S','S'];
+const MONTH_NAMES = ['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'];
+const DAY_NAMES = ['D','L','M','M','G','V','S'];
 
 // ── STATE ─────────────────────────────────────────────────────
 let currentUser = null;   // { id, nome, senha, role, nurseId }
@@ -64,6 +64,37 @@ function registerServiceWorker() {
   }
 }
 
+let deferredPrompt;
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  deferredPrompt = e;
+  document.getElementById('installPwaBtn').style.display = 'flex';
+});
+
+function installApp() {
+  if (deferredPrompt) {
+    deferredPrompt.prompt();
+    deferredPrompt.userChoice.then((choiceResult) => {
+      if (choiceResult.outcome === 'accepted') {
+        document.getElementById('installPwaBtn').style.display = 'none';
+      }
+      deferredPrompt = null;
+    });
+  } else {
+    // Show manual install info for iOS
+    document.getElementById('pwaInstallModal').classList.remove('hidden');
+  }
+}
+
+function togglePassword() {
+  const input = document.getElementById('loginPass');
+  if (input.type === 'password') {
+    input.type = 'text';
+  } else {
+    input.type = 'password';
+  }
+}
+
 async function showSplash() {
   // Show splash for 1.5s then load data
   try {
@@ -95,7 +126,7 @@ async function initializeData() {
 
   // Populate login dropdown
   const loginSelect = document.getElementById('loginUser');
-  loginSelect.innerHTML = '<option value="">Selecione seu nome...</option>' +
+  loginSelect.innerHTML = '<option value="">Seleziona il tuo nome...</option>' +
     appUsers.map(u => `<option value="${u.id}">${u.nome}${u.role === 'admin' ? ' (Admin)' : ''}</option>`).join('');
 
   // Load nurses (normaliza colunas do Sheet)
@@ -160,18 +191,18 @@ function doLogin() {
   const errorEl = document.getElementById('loginError');
 
   if (!userId) {
-    errorEl.textContent = 'Selecione seu nome';
+    errorEl.textContent = 'Seleziona il tuo nome';
     return;
   }
 
   const user = appUsers.find(u => String(u.id) === String(userId));
   if (!user) {
-    errorEl.textContent = 'Usuário não encontrado';
+    errorEl.textContent = 'Utente non trovato';
     return;
   }
 
   if (String(user.senha) !== String(pass)) {
-    errorEl.textContent = 'Senha incorreta';
+    errorEl.textContent = 'Password errata';
     return;
   }
 
@@ -204,12 +235,13 @@ function enterApp() {
   const initials = currentUser.nome.split(' ').map(w => w[0]).join('').substring(0, 2).toUpperCase();
   document.getElementById('headerAvatar').textContent = initials;
   document.getElementById('headerName').textContent = currentUser.nome;
-  document.getElementById('headerRole').textContent = isAdmin ? 'Administradora' : 'Funcionária';
+  document.getElementById('headerRole').textContent = isAdmin ? 'Amministratore' : 'Dipendente';
 
   // Show/hide admin tab
   totalPages = isAdmin ? 3 : 2;
   document.getElementById('navAdminBtn').style.display = isAdmin ? 'flex' : 'none';
   document.getElementById('dotAdmin').style.display = isAdmin ? 'block' : 'none';
+  document.getElementById('pageAdmin').style.display = isAdmin ? 'block' : 'none';
 
   // Build UI
   buildLegend();
@@ -233,7 +265,7 @@ function populateCalendarFilter() {
     sel.value = currentUser.nurseId;
     calNurseFilter = currentUser.nurseId;
   } else {
-    sel.innerHTML = '<option value="all">👥 Todos os funcionários</option>' +
+    sel.innerHTML = '<option value="all">👥 Tutti i dipendenti</option>' +
       nurses.map(n => `<option value="${n.id}">${n.name}</option>`).join('');
     sel.value = calNurseFilter;
   }
@@ -465,35 +497,35 @@ function renderCalendar() {
   const todayDate = today.getDate();
 
   // Weekday headers
-  const weekdayNames = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
-  const weekdaysEl = document.getElementById('calWeekdays');
-  weekdaysEl.innerHTML = weekdayNames.map((name, i) =>
-    `<div class="cal-weekday ${i === 0 || i === 6 ? 'wkend' : ''}">${name}</div>`
-  ).join('');
+    const weekdayNames = ['Dom', 'Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab'];
+    const weekdaysEl = document.getElementById('calWeekdays');
+    weekdaysEl.innerHTML = weekdayNames.map((name, i) =>
+      `<div class="cal-weekday ${i === 0 || i === 6 ? 'wkend' : ''}">${name}</div>`
+    ).join('');
 
-  // First day of month (0=Sun)
-  const firstDow = new Date(y, m, 1).getDay();
+    // First day of month (0=Sun)
+    const firstDow = new Date(y, m, 1).getDay();
 
-  // Build day cells
-  const daysEl = document.getElementById('calDays');
-  let html = '';
+    // Build day cells
+    const daysEl = document.getElementById('calDays');
+    let html = '';
 
-  // Empty cells for days before month starts
-  for (let i = 0; i < firstDow; i++) {
-    html += '<div class="cal-day-cell empty"></div>';
-  }
+    // Empty cells for days before month starts
+    for (let i = 0; i < firstDow; i++) {
+        html += '<div class="cal-day-cell empty"></div>';
+    }
 
-  // Determine what to show
-  const showingSingle = calNurseFilter !== 'all';
-  const selectedNurse = showingSingle ? nurses.find(n => n.id === calNurseFilter) : null;
+    // Determine what to show
+    const showingSingle = calNurseFilter !== 'all';
+    const selectedNurse = showingSingle ? nurses.find(n => n.id === calNurseFilter) : null;
 
-  // Update subtitle
-  const hasData = Object.keys(schedule).some(k => k.includes(`_${m}_${y}_`));
-  if (showingSingle && selectedNurse) {
-    document.getElementById('monthSub').textContent = hasData ? `Escala de ${selectedNurse.name}` : 'Aguardando publicação';
-  } else {
-    document.getElementById('monthSub').textContent = hasData ? 'Escala Geral' : 'Aguardando publicação';
-  }
+    // Update subtitle
+    const hasData = Object.keys(schedule).some(k => k.includes(`_${m}_${y}_`));
+    if (showingSingle && selectedNurse) {
+        document.getElementById('monthSub').textContent = hasData ? `Turni di ${selectedNurse.name}` : 'In attesa di pubblicazione';
+    } else {
+        document.getElementById('monthSub').textContent = hasData ? 'Turno Generale' : 'In attesa di pubblicazione';
+    }
 
   // Day cells
   for (let d = 1; d <= days; d++) {
@@ -507,7 +539,7 @@ function renderCalendar() {
       // Show single nurse's shift as a badge
       const code = getShift(selectedNurse.id, d);
       const sh = SHIFTS[code] || SHIFTS['OFF'];
-      shiftHtml = `<div class="cal-day-shift" style="background:${sh.color};color:${sh.text}">${code === 'OFF' ? 'FO' : code}</div>`;
+      shiftHtml = `<div class="cal-day-shift" style="background:${sh.color};color:${sh.text}">${code === 'OFF' ? '' : code}</div>`;
     } else if (nurses.length > 0 && hasData) {
       // Show colored dots for all nurses (summary view)
       const dots = nurses.slice(0, 7).map(n => {
@@ -546,7 +578,7 @@ function toggleDayDetail(day) {
   const m = currentMonth.getMonth();
   const y = currentMonth.getFullYear();
   const date = new Date(y, m, day);
-  const dayNames = ['Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado'];
+  const dayNames = ['Domenica','Lunedì','Martedì','Mercoledì','Giovedì','Venerdì','Sabato'];
 
   // Determine which nurses to show
   let detailNurses;
@@ -560,14 +592,14 @@ function toggleDayDetail(day) {
     const code = getShift(nurse.id, day);
     const sh = SHIFTS[code] || SHIFTS['OFF'];
     return `<div class="cal-detail-item">
-      <div class="cal-detail-shift" style="background:${sh.color};color:${sh.text}">${code === 'OFF' ? 'FO' : code}</div>
+      <div class="cal-detail-shift" style="background:${sh.color};color:${sh.text}">${code === 'OFF' ? '' : code}</div>
       <div class="cal-detail-name">${nurse.name}</div>
       <div class="cal-detail-hours">${sh.h}h</div>
     </div>`;
   }).join('');
 
   if (detailNurses.length === 0) {
-    listHtml = '<div style="text-align:center;color:var(--text-3);padding:16px;">Nenhum funcionário selecionado</div>';
+    listHtml = '<div style="text-align:center;color:var(--text-3);padding:16px;">Nessun dipendente selezionato</div>';
   }
 
   const panel = document.createElement('div');
@@ -575,7 +607,7 @@ function toggleDayDetail(day) {
   panel.className = 'cal-day-detail-panel';
   panel.innerHTML = `
     <div class="cal-detail-title">
-      <span>📅 Dia ${day} — ${dayNames[date.getDay()]}</span>
+      <span>📅 Giorno ${day} — ${dayNames[date.getDay()]}</span>
       <button class="cal-detail-close" onclick="closeDayDetail()">✕</button>
     </div>
     <div class="cal-detail-list">${listHtml}</div>
@@ -627,7 +659,7 @@ function renderRequests() {
   if (filtered.length === 0) {
     list.innerHTML = `<div class="empty-state">
       <div class="empty-icon">📄</div>
-      <p>${statusFilter !== 'all' || nurseFilter !== 'all' ? 'Nenhuma solicitação com estes filtros' : 'Nenhuma solicitação ainda'}</p>
+      <p>${statusFilter !== 'all' || nurseFilter !== 'all' ? 'Nessuna richiesta con questi filtri' : 'Nessuna richiesta ancora'}</p>
     </div>`;
     return;
   }
@@ -643,26 +675,30 @@ function renderRequests() {
   });
 
   const typeLabels = {
-    swap: '🔄 Troca de Turno',
-    vacation: '🏖️ Férias',
-    justified: '📋 Folga',
-    FE: '🏖️ Férias',
-    OFF: '📋 Folga',
-    AT: '🏥 Atestado/Licença',
-    OFF_INJ: '⚠️ Falta Injustificada'
+    swap: '🔄 Cambio Turno',
+    vacation: '🏖️ Ferie',
+    justified: '📋 Riposo',
+    FE: '🏖️ Ferie',
+    OFF: '📋 Riposo',
+    AT: '🏥 Certificato/Licenza',
+    OFF_INJ: '⚠️ Assenza Ingiustificata'
   };
 
-  const statusLabels = { pending: '⏳ Pendente', approved: '✅ Aprovado', rejected: '❌ Reprovado' };
+  const statusLabels = { pending: '⏳ In attesa', approved: '✅ Approvato', rejected: '❌ Rifiutato' };
 
   list.innerHTML = filtered.map((req, idx) => {
     const isPending = req.status === 'pending';
     const canApprove = isAdmin && isPending;
 
-    // Waiting time
-    let waitingHtml = '';
-    if (isPending && req.createdAt) {
-      const diff = Math.floor((new Date() - new Date(req.createdAt)) / (1000 * 60 * 60 * 24));
-      waitingHtml = `<div class="req-waiting">⏱️ Há ${diff === 0 ? 'menos de 1 dia' : diff + ' dia' + (diff > 1 ? 's' : '')}</div>`;
+    // Creation date formatted
+    let createdHtml = '';
+    if (req.createdAt) {
+      const d = new Date(req.createdAt);
+      if (!isNaN(d.getTime())) {
+        const dStr = d.toLocaleDateString('it-IT');
+        const tStr = d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
+        createdHtml = `<div class="req-waiting" style="color:var(--text-3); font-size: 11px;">🕒 Inviata il ${dStr} alle ${tStr}</div>`;
+      }
     }
 
     // Date display
@@ -693,13 +729,13 @@ function renderRequests() {
         </div>` : ''}
         ${req.approvedBy ? `<div class="req-detail-row">
           <span class="req-detail-icon">✍️</span>
-          <span style="color:${req.status === 'approved' ? 'var(--success)' : 'var(--danger)'}">${req.status === 'approved' ? 'Aprovado' : 'Reprovado'} por ${req.approvedBy}</span>
+          <span style="color:${req.status === 'approved' ? 'var(--success)' : 'var(--danger)'}">${req.status === 'approved' ? 'Approvato' : 'Rifiutato'} da ${req.approvedBy}</span>
         </div>` : ''}
       </div>
-      ${waitingHtml}
+      ${createdHtml}
       ${canApprove ? `<div class="req-card-actions">
-        <button class="req-action-btn btn-approve" onclick="approveRequest('${req.id}')">✅ Aprovar</button>
-        <button class="req-action-btn btn-reject" onclick="rejectRequest('${req.id}')">❌ Reprovar</button>
+        <button class="req-action-btn btn-approve" onclick="approveRequest('${req.id}')">✅ Approva</button>
+        <button class="req-action-btn btn-reject" onclick="rejectRequest('${req.id}')">❌ Rifiuta</button>
       </div>` : ''}
     </div>`;
   }).join('');
@@ -740,7 +776,7 @@ function onReqTypeChange() {
 
   document.getElementById('reqEndField').style.display = isRange ? 'block' : 'none';
   document.getElementById('reqSwapField').style.display = isSwap ? 'block' : 'none';
-  document.getElementById('reqDateLabel').textContent = isRange ? 'Data Início' : 'Data';
+  document.getElementById('reqDateLabel').textContent = isRange ? 'Data Inizio' : 'Data';
 }
 
 async function submitNewRequest() {
@@ -750,7 +786,7 @@ async function submitNewRequest() {
   const desc = document.getElementById('reqDesc').value;
 
   if (!startDate) {
-    toast('Preencha a data', 'warning');
+    toast('Compila la data', 'warning');
     return;
   }
 
@@ -785,9 +821,9 @@ async function submitNewRequest() {
     renderRequests();
     updateBadges();
     closeModal('newReqModal');
-    toast('Solicitação enviada!', 'success');
+    toast('Richiesta inviata!', 'success');
   } else {
-    toast('Erro ao enviar solicitação', 'error');
+    toast("Errore durante l'invio della richiesta", 'error');
   }
   showLoading(false);
 }
@@ -810,9 +846,9 @@ async function approveRequest(id) {
     }
     renderRequests();
     updateBadges();
-    toast('Solicitação aprovada!', 'success');
+    toast('Richiesta approvata!', 'success');
   } else {
-    toast('Erro ao aprovar', 'error');
+    toast("Errore durante l'approvazione", 'error');
   }
   showLoading(false);
 }
@@ -834,9 +870,9 @@ async function rejectRequest(id) {
     }
     renderRequests();
     updateBadges();
-    toast('Solicitação reprovada', 'warning');
+    toast('Richiesta rifiutata', 'warning');
   } else {
-    toast('Erro ao reprovar', 'error');
+    toast('Errore durante il rifiuto', 'error');
   }
   showLoading(false);
 }
@@ -858,21 +894,21 @@ function renderAdminUsers() {
   const list = document.getElementById('adminUsersList');
 
   if (appUsers.length === 0) {
-    list.innerHTML = '<div class="empty-state"><div class="empty-icon">👥</div><p>Nenhum usuário cadastrado</p></div>';
+    list.innerHTML = '<div class="empty-state"><div class="empty-icon">👥</div><p>Nessun utente registrato</p></div>';
     return;
   }
 
   list.innerHTML = appUsers.map(user => {
     const initials = user.nome.split(' ').map(w => w[0]).join('').substring(0, 2).toUpperCase();
     const linkedNurse = nurses.find(n => String(n.id) === String(user.nurseId));
-    const nurseName = linkedNurse ? linkedNurse.name : 'Não vinculado';
+    const nurseName = linkedNurse ? linkedNurse.name : 'Non collegato';
 
     return `<div class="user-card" onclick="openEditUserModal('${user.id}')">
       <div class="user-avatar role-${user.role}">${initials}</div>
       <div class="user-info">
         <div class="user-info-name">${user.nome}</div>
         <div class="user-info-meta">
-          <span class="role-badge ${user.role}">${user.role === 'admin' ? 'Admin' : 'Usuário'}</span>
+          <span class="role-badge ${user.role}">${user.role === 'admin' ? 'Admin' : 'Utente'}</span>
           <span>${nurseName}</span>
         </div>
       </div>
@@ -889,7 +925,7 @@ function openAddUserModal() {
   document.getElementById('newUserRole').value = 'user';
 
   // Populate nurse select
-  document.getElementById('newUserNurse').innerHTML = '<option value="">-- Nenhum --</option>' +
+  document.getElementById('newUserNurse').innerHTML = '<option value="">-- Nessuno --</option>' +
     nurses.map(n => `<option value="${n.id}">${n.name}</option>`).join('');
 
   openModal('addUserModal');
@@ -902,7 +938,7 @@ async function submitNewUser() {
   const role = document.getElementById('newUserRole').value;
 
   if (!nome || !senha) {
-    toast('Preencha nome e senha', 'warning');
+    toast('Compila nome e password', 'warning');
     return;
   }
 
@@ -920,9 +956,9 @@ async function submitNewUser() {
     appUsers.push(newUser);
     renderAdminUsers();
     closeModal('addUserModal');
-    toast(`${nome} cadastrado!`, 'success');
+    toast(`${nome} registrato!`, 'success');
   } else {
-    toast('Erro ao cadastrar', 'error');
+    toast('Errore di registrazione', 'error');
   }
   showLoading(false);
 }
@@ -945,7 +981,7 @@ async function submitEditUser() {
   const senha = document.getElementById('editUserPass').value;
   const role = document.getElementById('editUserRole').value;
 
-  if (!nome) { toast('Preencha o nome', 'warning'); return; }
+  if (!nome) { toast('Compila il nome', 'warning'); return; }
 
   const updates = { nome, role };
   if (senha) updates.senha = senha;
@@ -961,9 +997,9 @@ async function submitEditUser() {
     }
     renderAdminUsers();
     closeModal('editUserModal');
-    toast('Usuário atualizado!', 'success');
+    toast('Utente aggiornato!', 'success');
   } else {
-    toast('Erro ao atualizar', 'error');
+    toast("Errore durante l'aggiornamento", 'error');
   }
   showLoading(false);
 }
@@ -973,11 +1009,11 @@ async function deleteUser() {
   const user = appUsers.find(u => String(u.id) === String(id));
 
   if (user && user.role === 'admin' && appUsers.filter(u => u.role === 'admin').length <= 1) {
-    toast('Não é possível excluir o único administrador', 'error');
+    toast("Non è possibile eliminare l'unico amministratore", 'error');
     return;
   }
 
-  if (!confirm(`Excluir ${user?.nome}?`)) return;
+  if (!confirm(`Eliminare ${user?.nome}?`)) return;
 
   showLoading(true);
   const result = await apiDelete('Usuarios', 'id', id);
@@ -985,9 +1021,9 @@ async function deleteUser() {
     appUsers = appUsers.filter(u => String(u.id) !== String(id));
     renderAdminUsers();
     closeModal('editUserModal');
-    toast('Usuário excluído', 'info');
+    toast('Utente eliminato', 'info');
   } else {
-    toast('Erro ao excluir', 'error');
+    toast("Errore durante l'eliminazione", 'error');
   }
   showLoading(false);
 }
@@ -1019,44 +1055,4 @@ function toast(msg, type = 'success', dur = 3000) {
     el.classList.add('hiding');
     setTimeout(() => el.remove(), 300);
   }, dur);
-}
-
-// ── PWA INSTALL PROMPT ────────────────────────────────────────
-let deferredPrompt;
-window.addEventListener('beforeinstallprompt', (e) => {
-  e.preventDefault();
-  deferredPrompt = e;
-
-  // Show install banner after entering app
-  setTimeout(() => {
-    if (document.getElementById('mainApp').classList.contains('active')) {
-      showInstallBanner();
-    }
-  }, 5000);
-});
-
-function showInstallBanner() {
-  if (document.querySelector('.install-banner')) return;
-
-  const banner = document.createElement('div');
-  banner.className = 'install-banner';
-  banner.innerHTML = `
-    <div class="install-banner-text">📲 Instale o app para acesso rápido!</div>
-    <button class="install-banner-btn" onclick="installApp()">Instalar</button>
-    <button class="install-banner-close" onclick="this.parentElement.remove()">✕</button>
-  `;
-  document.getElementById('mainApp').appendChild(banner);
-}
-
-async function installApp() {
-  const banner = document.querySelector('.install-banner');
-  if (banner) banner.remove();
-  if (!deferredPrompt) return;
-
-  deferredPrompt.prompt();
-  const { outcome } = await deferredPrompt.userChoice;
-  if (outcome === 'accepted') {
-    toast('App instalado com sucesso!', 'success');
-  }
-  deferredPrompt = null;
 }

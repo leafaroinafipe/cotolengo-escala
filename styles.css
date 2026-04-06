@@ -713,7 +713,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  padding-bottom: 100px; /* space for FAB */
+  padding-bottom: 180px; /* space for FAB */
 }
 
 .req-card {
@@ -786,19 +786,11 @@ body {
   width: fit-content;
 }
 
-.req-card-actions {
-  display: flex;
-  gap: 8px;
-  margin-top: 12px;
-  padding-top: 12px;
-  border-top: 1px solid var(--glass-border);
-}
-.req-action-btn {
-  flex: 1;
-  padding: 10px;
+.req-action-btn-small {
+  padding: 4px 8px;
   border: none;
   border-radius: var(--radius-xs);
-  font-size: 13px;
+  font-size: 11px;
   font-weight: 700;
   font-family: var(--font);
   cursor: pointer;
@@ -806,9 +798,9 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: 4px;
 }
-.req-action-btn:active { transform: scale(0.96); }
+.req-action-btn-small:active { transform: scale(0.96); }
 .btn-approve {
   background: var(--success);
   color: white;

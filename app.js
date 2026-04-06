@@ -4,7 +4,7 @@
 // ============================================================
 
 // ── CONFIG ────────────────────────────────────────────────────
-const GOOGLE_API_URL = 'https://script.google.com/macros/s/AKfycbz-qW0XE6R5iWSrBkMp79y_F6FIAAUqpUH6nhBkUUwK15HbYoksp3fl6B-UDWZJxLL2oQ/exec';
+const GOOGLE_API_URL = 'https://script.google.com/macros/s/AKfycbyvlpxt-3r53gP75N0GVdqptUsMlZdXtsgtHlQkjWYCgTG9g3exjB5BG7MD6jM2wAU8Lw/exec';
 
 const SHIFTS = {
   'M1': { name:'Mattina 1',     h:7.0,  color:'#f59e0b', text:'#1a1a00', period:'morning' },
@@ -110,16 +110,16 @@ async function showSplash() {
 }
 
 async function initializeData() {
-  // Setup Google Sheets headers if needed
-  await ensureSheetSetup();
-
   // Load users for login dropdown
   const usersResult = await apiRead('Usuarios');
   if (usersResult && usersResult.length > 0) {
     appUsers = usersResult;
   } else {
+    // Database empty or fresh, ensure sheets exist before proceeding
+    await ensureSheetSetup();
+
     // Create default admin user
-    const adminUser = { id: 'admin_1', nome: 'Coordenadora', senha: 'coord2026', role: 'admin', nurseId: '' };
+    const adminUser = { id: 'admin_' + Date.now(), nome: 'Coordinatrice', senha: 'coord2026', role: 'admin', nurseId: '' };
     await apiWrite('Usuarios', adminUser);
     appUsers = [adminUser];
   }
@@ -128,14 +128,6 @@ async function initializeData() {
   const loginSelect = document.getElementById('loginUser');
   loginSelect.innerHTML = '<option value="">Seleziona il tuo nome...</option>' +
     appUsers.map(u => `<option value="${u.id}">${u.nome}${u.role === 'admin' ? ' (Admin)' : ''}</option>`).join('');
-
-  // Load nurses (normaliza colunas do Sheet)
-  const nursesResult = await apiRead('Funcionarios');
-  console.log('📋 Raw Funcionarios from Sheet:', nursesResult);
-  if (nursesResult && nursesResult.length > 0) {
-    nurses = normalizeNurses(nursesResult);
-    console.log('📋 Normalized nurses:', nurses);
-  }
 }
 
 async function ensureSheetSetup() {
@@ -497,21 +489,22 @@ function renderCalendar() {
   const todayDate = today.getDate();
 
   // Weekday headers
-    const weekdayNames = ['Dom', 'Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab'];
+    const weekdayNames = ['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom'];
     const weekdaysEl = document.getElementById('calWeekdays');
     weekdaysEl.innerHTML = weekdayNames.map((name, i) =>
-      `<div class="cal-weekday ${i === 0 || i === 6 ? 'wkend' : ''}">${name}</div>`
+      `<div class="cal-weekday ${i === 5 || i === 6 ? 'wkend' : ''}">${name}</div>`
     ).join('');
 
     // First day of month (0=Sun)
     const firstDow = new Date(y, m, 1).getDay();
+    const emptyCells = (firstDow + 6) % 7;
 
     // Build day cells
     const daysEl = document.getElementById('calDays');
     let html = '';
 
     // Empty cells for days before month starts
-    for (let i = 0; i < firstDow; i++) {
+    for (let i = 0; i < emptyCells; i++) {
         html += '<div class="cal-day-cell empty"></div>';
     }
 
@@ -538,13 +531,16 @@ function renderCalendar() {
     if (showingSingle && selectedNurse) {
       // Show single nurse's shift as a badge
       const code = getShift(selectedNurse.id, d);
-      const sh = SHIFTS[code] || SHIFTS['OFF'];
-      shiftHtml = `<div class="cal-day-shift" style="background:${sh.color};color:${sh.text}">${code === 'OFF' ? '' : code}</div>`;
+      if (code !== 'OFF') {
+        const sh = SHIFTS[code];
+        shiftHtml = `<div class="cal-day-shift" style="background:${sh.color};color:${sh.text}">${code}</div>`;
+      }
     } else if (nurses.length > 0 && hasData) {
       // Show colored dots for all nurses (summary view)
       const dots = nurses.slice(0, 7).map(n => {
         const code = getShift(n.id, d);
-        const sh = SHIFTS[code] || SHIFTS['OFF'];
+        if (code === 'OFF') return '';
+        const sh = SHIFTS[code];
         return `<div class="cal-shift-dot" style="background:${sh.color}" title="${n.name}: ${code}"></div>`;
       }).join('');
       shiftHtml = `<div class="cal-day-dots">${dots}</div>`;
@@ -590,9 +586,10 @@ function toggleDayDetail(day) {
 
   let listHtml = detailNurses.map(nurse => {
     const code = getShift(nurse.id, day);
-    const sh = SHIFTS[code] || SHIFTS['OFF'];
+    if (code === 'OFF') return '';
+    const sh = SHIFTS[code];
     return `<div class="cal-detail-item">
-      <div class="cal-detail-shift" style="background:${sh.color};color:${sh.text}">${code === 'OFF' ? '' : code}</div>
+      <div class="cal-detail-shift" style="background:${sh.color};color:${sh.text}">${code}</div>
       <div class="cal-detail-name">${nurse.name}</div>
       <div class="cal-detail-hours">${sh.h}h</div>
     </div>`;
@@ -689,19 +686,9 @@ function renderRequests() {
   list.innerHTML = filtered.map((req, idx) => {
     const isPending = req.status === 'pending';
     const canApprove = isAdmin && isPending;
+    const canDelete = isAdmin || (currentUser && currentUser.nurseId === req.nurseId);
 
-    // Creation date formatted
-    let createdHtml = '';
-    if (req.createdAt) {
-      const d = new Date(req.createdAt);
-      if (!isNaN(d.getTime())) {
-        const dStr = d.toLocaleDateString('it-IT');
-        const tStr = d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
-        createdHtml = `<div class="req-waiting" style="color:var(--text-3); font-size: 11px;">🕒 Inviata il ${dStr} alle ${tStr}</div>`;
-      }
-    }
-
-    // Date display
+    // Date display (requested dates)
     let dateDisplay = '';
     if (req.startDate) {
       const start = formatDate(req.startDate);
@@ -709,20 +696,36 @@ function renderRequests() {
       dateDisplay = start === end ? start : `${start} → ${end}`;
     }
 
+    // Creation date formatted with Requested Date
+    let createdHtml = '';
+    if (req.createdAt) {
+      const d = new Date(req.createdAt);
+      if (!isNaN(d.getTime())) {
+        const dStr = d.toLocaleDateString('it-IT');
+        const tStr = d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
+        createdHtml = `<div class="req-waiting" style="color:var(--text-3); font-size: 11px;">🕒 Richiesto per il <strong>${dateDisplay}</strong> &nbsp;•&nbsp; Inviata il ${dStr} alle ${tStr}</div>`;
+      }
+    }
+    if (!createdHtml) {
+      createdHtml = `<div class="req-waiting" style="color:var(--text-3); font-size: 11px;">🕒 Richiesto per il <strong>${dateDisplay}</strong></div>`;
+    }
+
     return `<div class="req-card status-${req.status}" style="animation-delay:${idx * 0.05}s">
       <div class="req-card-top">
         <div class="req-card-type">${typeLabels[req.type] || req.type}</div>
-        <div class="req-card-status status-pill-${req.status}">${statusLabels[req.status] || req.status}</div>
+        <div style="display:flex; flex-direction:column; align-items:flex-end; gap:6px;">
+          <div class="req-card-status status-pill-${req.status}">${statusLabels[req.status] || req.status}</div>
+          ${canApprove ? `
+            <button class="req-action-btn-small btn-approve" onclick="approveRequest('${req.id}')">✅ Approva</button>
+            <button class="req-action-btn-small btn-reject" onclick="rejectRequest('${req.id}')">❌ Rifiuta</button>
+          ` : ''}
+        </div>
       </div>
       <div class="req-card-details">
         <div class="req-detail-row">
           <span class="req-detail-icon">👤</span>
           <strong>${req.nurseName || ''}</strong>
         </div>
-        ${dateDisplay ? `<div class="req-detail-row">
-          <span class="req-detail-icon">📅</span>
-          <span>${dateDisplay}</span>
-        </div>` : ''}
         ${req.desc ? `<div class="req-detail-row">
           <span class="req-detail-icon">💬</span>
           <span>${req.desc}</span>
@@ -732,20 +735,20 @@ function renderRequests() {
           <span style="color:${req.status === 'approved' ? 'var(--success)' : 'var(--danger)'}">${req.status === 'approved' ? 'Approvato' : 'Rifiutato'} da ${req.approvedBy}</span>
         </div>` : ''}
       </div>
-      ${createdHtml}
-      ${canApprove ? `<div class="req-card-actions">
-        <button class="req-action-btn btn-approve" onclick="approveRequest('${req.id}')">✅ Approva</button>
-        <button class="req-action-btn btn-reject" onclick="rejectRequest('${req.id}')">❌ Rifiuta</button>
-      </div>` : ''}
+      <div style="display:flex; justify-content:space-between; align-items:flex-end; margin-top:8px;">
+        ${createdHtml}
+        ${canDelete ? `<button class="req-action-btn-small btn-reject" style="width:max-content; padding:4px 8px; font-size:11px;" onclick="deleteRequest('${req.id}')">🗑️ Elimina</button>` : ''}
+      </div>
     </div>`;
   }).join('');
 }
 
 function formatDate(dateStr) {
   if (!dateStr) return '';
-  const parts = String(dateStr).split('-');
+  const dStr = String(dateStr).split('T')[0];
+  const parts = dStr.split('-');
   if (parts.length === 3) return `${parts[2]}/${parts[1]}/${parts[0]}`;
-  return dateStr;
+  return dStr;
 }
 
 // ── NEW REQUEST ───────────────────────────────────────────────
@@ -873,6 +876,21 @@ async function rejectRequest(id) {
     toast('Richiesta rifiutata', 'warning');
   } else {
     toast('Errore durante il rifiuto', 'error');
+  }
+  showLoading(false);
+}
+
+async function deleteRequest(id) {
+  if (!confirm('Sei sicuro di voler eliminare questa richiesta?')) return;
+  showLoading(true);
+  const result = await apiDelete('Solicitacoes', 'id', id);
+  if (result && result.status === 'success') {
+    requests = requests.filter(r => String(r.id) !== String(id));
+    renderRequests();
+    updateBadges();
+    toast('Richiesta eliminata', 'info');
+  } else {
+    toast("Errore durante l'eliminazione", 'error');
   }
   showLoading(false);
 }

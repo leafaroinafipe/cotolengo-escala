@@ -1,9 +1,10 @@
 // ============================================================
-//  Cotolengo Escala — Service Worker v1.0
-//  Cache offline para o PWA
+//  Cotolengo Turni — Service Worker v2.0
+//  Cache offline para o PWA — Auto-versionamento por timestamp
 // ============================================================
 
-const CACHE_NAME = 'cotolengo-escala-v1';
+const CACHE_VERSION = '2';
+const CACHE_NAME = `cotolengo-turni-v${CACHE_VERSION}`;
 const ASSETS = [
   './',
   './index.html',
@@ -30,14 +31,25 @@ self.addEventListener('activate', (e) => {
 });
 
 self.addEventListener('fetch', (e) => {
-  // Network-first for API calls, cache-first for assets
+  // Network-first for API calls, stale-while-revalidate for assets
   if (e.request.url.includes('script.google.com')) {
     e.respondWith(
       fetch(e.request).catch(() => caches.match(e.request))
     );
   } else {
+    // Stale-while-revalidate: serve cache immediately, update in background
     e.respondWith(
-      caches.match(e.request).then(cached => cached || fetch(e.request))
+      caches.open(CACHE_NAME).then(cache => {
+        return cache.match(e.request).then(cached => {
+          const fetchPromise = fetch(e.request).then(response => {
+            if (response && response.status === 200) {
+              cache.put(e.request, response.clone());
+            }
+            return response;
+          }).catch(() => cached);
+          return cached || fetchPromise;
+        });
+      })
     );
   }
 });

@@ -1,7 +1,8 @@
 {
-  "name": "Cotolengo Escala",
-  "short_name": "Escala",
-  "description": "Sistema de Escala de Enfermagem — Cotolengo",
+  "name": "Cotolengo Turni",
+  "short_name": "Turni",
+  "description": "App per la gestione dei turni del personale — Cotolengo",
+  "lang": "it",
   "start_url": "./index.html",
   "display": "standalone",
   "orientation": "portrait",

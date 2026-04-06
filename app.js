@@ -4,7 +4,25 @@
 // ============================================================
 
 // ── CONFIG ────────────────────────────────────────────────────
-const GOOGLE_API_URL = 'https://script.google.com/macros/s/AKfycbyvlpxt-3r53gP75N0GVdqptUsMlZdXtsgtHlQkjWYCgTG9g3exjB5BG7MD6jM2wAU8Lw/exec';
+const GOOGLE_API_URL = 'https://script.google.com/macros/s/AKfycbwsfN_I_dP8H6C7odQDPeppoecyiUPAtdo6_P3bBgIj_vfMULKX6Qm5XyZB4P2zmYWiqQ/exec';
+const API_KEY = 'cotolengo_2026_secure_key';
+
+// ── UTILS: SHA-256 Hash (para senhas) ───────────────────────
+async function sha256(text) {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(text);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+// ── UTILS: Gerar ID único ────────────────────────────────
+function generateId() {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  return Date.now() + '-' + Math.random().toString(36).substring(2, 9);
+}
 
 const SHIFTS = {
   'M1': { name:'Mattina 1',     h:7.0,  color:'#f59e0b', text:'#1a1a00', period:'morning' },
@@ -145,7 +163,7 @@ async function ensureSheetSetup() {
 async function apiCall(action, sheetName, body = null) {
   if (!GOOGLE_API_URL) return null;
   try {
-    const url = `${GOOGLE_API_URL}?action=${action}&sheetName=${sheetName}`;
+    const url = `${GOOGLE_API_URL}?action=${action}&sheetName=${sheetName}&apiKey=${API_KEY}`;
     const opts = body ? {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
@@ -622,7 +640,7 @@ function closeDayDetail() {
 // ── REQUESTS ──────────────────────────────────────────────────
 function populateFilterNurse() {
   const sel = document.getElementById('filterNurse');
-  sel.innerHTML = '<option value="all">👤 Todos os funcionários</option>' +
+  sel.innerHTML = '<option value="all">👤 Tutti i dipendenti</option>' +
     nurses.map(n => `<option value="${n.id}">${n.name}</option>`).join('');
 }
 
@@ -672,16 +690,27 @@ function renderRequests() {
   });
 
   const typeLabels = {
-    swap: '🔄 Cambio Turno',
-    vacation: '🏖️ Ferie',
-    justified: '📋 Riposo',
-    FE: '🏖️ Ferie',
-    OFF: '📋 Riposo',
-    AT: '🏥 Certificato/Licenza',
-    OFF_INJ: '⚠️ Assenza Ingiustificata'
+    swap: 'Cambio Turno',
+    vacation: 'Ferie',
+    justified: 'Riposo',
+    FE: 'Ferie',
+    OFF: 'Riposo',
+    AT: 'Certificato/Licenza',
+    OFF_INJ: 'Assenza Ingiustificata'
   };
 
-  const statusLabels = { pending: '⏳ In attesa', approved: '✅ Approvato', rejected: '❌ Rifiutato' };
+  const typeIcons = {
+    swap: '🔄',
+    vacation: '🏖️',
+    justified: '📋',
+    FE: '🏖️',
+    OFF: '📋',
+    AT: '🏥',
+    OFF_INJ: '⚠️'
+  };
+
+  const statusLabels = { pending: 'In attesa', approved: 'Approvato', rejected: 'Rifiutato' };
+  const statusIcons = { pending: '⏳', approved: '✅', rejected: '❌' };
 
   list.innerHTML = filtered.map((req, idx) => {
     const isPending = req.status === 'pending';
@@ -696,49 +725,69 @@ function renderRequests() {
       dateDisplay = start === end ? start : `${start} → ${end}`;
     }
 
-    // Creation date formatted with Requested Date
-    let createdHtml = '';
+    // Creation date
+    let createdStr = '';
     if (req.createdAt) {
       const d = new Date(req.createdAt);
       if (!isNaN(d.getTime())) {
         const dStr = d.toLocaleDateString('it-IT');
         const tStr = d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
-        createdHtml = `<div class="req-waiting" style="color:var(--text-3); font-size: 11px;">🕒 Richiesto per il <strong>${dateDisplay}</strong> &nbsp;•&nbsp; Inviata il ${dStr} alle ${tStr}</div>`;
+        createdStr = `${dStr} • ${tStr}`;
       }
     }
-    if (!createdHtml) {
-      createdHtml = `<div class="req-waiting" style="color:var(--text-3); font-size: 11px;">🕒 Richiesto per il <strong>${dateDisplay}</strong></div>`;
+
+    // Person initials
+    const personName = req.nurseName || '';
+    const initials = personName.split(' ').map(w => w[0]).join('').substring(0, 2).toUpperCase();
+
+    // Build card sections
+    const descHtml = req.desc ? `
+      <div class="req-card-desc">
+        <span class="desc-icon">💬</span>
+        <span class="desc-text">${req.desc}</span>
+      </div>` : '';
+
+    const approvedHtml = req.approvedBy ? `
+      <div class="req-approved-row ${req.status === 'approved' ? 'is-approved' : 'is-rejected'}">
+        <span>✍️</span>
+        <span>${req.status === 'approved' ? 'Approvato' : 'Rifiutato'} da <strong>${req.approvedBy}</strong></span>
+      </div>` : '';
+
+    // Action buttons
+    let actionsHtml = '';
+    if (canApprove || canDelete) {
+      let btns = '';
+      if (canDelete) {
+        btns += `<button class="req-action-btn btn-delete-new" onclick="deleteRequest('${req.id}')">🗑️ Elimina</button>`;
+      }
+      if (canApprove) {
+        btns += `<button class="req-action-btn btn-reject-new" onclick="rejectRequest('${req.id}')">✕ Rifiuta</button>`;
+        btns += `<button class="req-action-btn btn-approve-new" onclick="approveRequest('${req.id}')">✓ Approva</button>`;
+      }
+      actionsHtml = `<div class="req-card-footer">${btns}</div>`;
     }
 
     return `<div class="req-card status-${req.status}" style="animation-delay:${idx * 0.05}s">
-      <div class="req-card-top">
-        <div class="req-card-type">${typeLabels[req.type] || req.type}</div>
-        <div style="display:flex; flex-direction:column; align-items:flex-end; gap:6px;">
-          <div class="req-card-status status-pill-${req.status}">${statusLabels[req.status] || req.status}</div>
-          ${canApprove ? `
-            <button class="req-action-btn-small btn-approve" onclick="approveRequest('${req.id}')">✅ Approva</button>
-            <button class="req-action-btn-small btn-reject" onclick="rejectRequest('${req.id}')">❌ Rifiuta</button>
-          ` : ''}
+      <div class="req-card-header">
+        <div class="req-card-type-wrap">
+          <div class="req-type-icon">${typeIcons[req.type] || '📄'}</div>
+          <div class="req-card-type">${typeLabels[req.type] || req.type}</div>
         </div>
+        <div class="req-card-status status-pill-${req.status}">${statusIcons[req.status] || ''} ${statusLabels[req.status] || req.status}</div>
       </div>
-      <div class="req-card-details">
-        <div class="req-detail-row">
-          <span class="req-detail-icon">👤</span>
-          <strong>${req.nurseName || ''}</strong>
+      <div class="req-card-body">
+        <div class="req-card-person">
+          <div class="req-person-avatar">${initials}</div>
+          <div class="req-person-name">${personName}</div>
         </div>
-        ${req.desc ? `<div class="req-detail-row">
-          <span class="req-detail-icon">💬</span>
-          <span>${req.desc}</span>
-        </div>` : ''}
-        ${req.approvedBy ? `<div class="req-detail-row">
-          <span class="req-detail-icon">✍️</span>
-          <span style="color:${req.status === 'approved' ? 'var(--success)' : 'var(--danger)'}">${req.status === 'approved' ? 'Approvato' : 'Rifiutato'} da ${req.approvedBy}</span>
-        </div>` : ''}
+        ${descHtml}
+        <div class="req-card-meta">
+          ${dateDisplay ? `<div class="req-meta-chip"><span class="meta-icon">📅</span> <strong>${dateDisplay}</strong></div>` : ''}
+          ${createdStr ? `<div class="req-meta-chip"><span class="meta-icon">🕒</span> ${createdStr}</div>` : ''}
+        </div>
+        ${approvedHtml}
       </div>
-      <div style="display:flex; justify-content:space-between; align-items:flex-end; margin-top:8px;">
-        ${createdHtml}
-        ${canDelete ? `<button class="req-action-btn-small btn-reject" style="width:max-content; padding:4px 8px; font-size:11px;" onclick="deleteRequest('${req.id}')">🗑️ Elimina</button>` : ''}
-      </div>
+      ${actionsHtml}
     </div>`;
   }).join('');
 }
@@ -804,7 +853,7 @@ async function submitNewRequest() {
   }
 
   const req = {
-    id: String(Date.now()),
+    id: generateId(),
     type,
     status: 'pending',
     nurseId,
@@ -961,7 +1010,7 @@ async function submitNewUser() {
   }
 
   const newUser = {
-    id: 'user_' + Date.now(),
+    id: 'user_' + generateId(),
     nome,
     senha,
     role,

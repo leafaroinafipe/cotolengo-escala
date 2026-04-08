@@ -652,6 +652,7 @@ function setStatusFilter(filter, el) {
 }
 
 function applyFilters() {
+  statusFilter = document.getElementById('filterStatus').value;
   nurseFilter = document.getElementById('filterNurse').value;
   renderRequests();
 }
@@ -768,12 +769,15 @@ function renderRequests() {
     }
 
     return `<div class="req-card status-${req.status}" style="animation-delay:${idx * 0.05}s">
-      <div class="req-card-header">
+      <div class="req-card-header" onclick="this.parentElement.classList.toggle('expanded')">
         <div class="req-card-type-wrap">
           <div class="req-type-icon">${typeIcons[req.type] || '📄'}</div>
           <div class="req-card-type">${typeLabels[req.type] || req.type}</div>
         </div>
-        <div class="req-card-status status-pill-${req.status}">${statusIcons[req.status] || ''} ${statusLabels[req.status] || req.status}</div>
+        <div style="display:flex; align-items:center; gap:8px;">
+          <div class="req-card-status status-pill-${req.status}">${statusIcons[req.status] || ''} ${statusLabels[req.status] || req.status}</div>
+          <div class="expand-chevron">⌄</div>
+        </div>
       </div>
       <div class="req-card-body">
         <div class="req-card-person">

@@ -106,39 +106,89 @@ function installApp() {
 
 function togglePassword() {
   const input = document.getElementById('loginPass');
+  const toggle = document.querySelector('.pw-toggle');
   if (input.type === 'password') {
     input.type = 'text';
+    if (toggle) toggle.textContent = '🙈';
   } else {
     input.type = 'password';
+    if (toggle) toggle.textContent = '👁️';
   }
 }
 
 async function showSplash() {
   // Show splash for 1.5s then load data
+  let initSuccess = false;
   try {
     await initializeData();
+    initSuccess = true;
   } catch (e) {
-    console.error('Init error:', e);
+    console.error('❌ Init error:', e);
   }
 
   setTimeout(() => {
     document.getElementById('splashScreen').classList.remove('active');
     document.getElementById('loginScreen').classList.add('active');
+    if (!initSuccess) {
+      showLoginError('Errore di connessione al server. Verifica la tua connessione internet.');
+    }
   }, 1500);
 }
 
+function showLoginError(msg) {
+  const errorEl = document.getElementById('loginError');
+  if (errorEl) {
+    errorEl.innerHTML = `${msg}<br><button onclick="retryConnection()" style="margin-top:8px; padding:8px 20px; background:var(--primary); color:white; border:none; border-radius:8px; font-weight:700; font-family:var(--font); cursor:pointer; font-size:13px;">🔄 Riprova</button>`;
+  }
+}
+
+async function retryConnection() {
+  const errorEl = document.getElementById('loginError');
+  if (errorEl) errorEl.innerHTML = '<span style="color:var(--text-3)">Connessione in corso...</span>';
+  try {
+    await initializeData();
+    if (errorEl) errorEl.textContent = '';
+    toast('Connessione riuscita!', 'success');
+  } catch (e) {
+    console.error('❌ Retry error:', e);
+    showLoginError('Impossibile connettersi. Verifica la connessione e riprova.');
+  }
+}
+
 async function initializeData() {
+  console.log('🔄 initializeData: Starting...');
+  console.log('🔗 API URL:', GOOGLE_API_URL);
+
   // Load users for login dropdown
-  const usersResult = await apiRead('Usuarios');
+  let usersResult;
+  try {
+    usersResult = await apiRead('Usuarios');
+    console.log('✅ Users loaded:', usersResult.length, 'users');
+  } catch (e) {
+    console.error('❌ Failed to load users:', e.message);
+    throw new Error('Impossibile caricare gli utenti: ' + e.message);
+  }
+
   if (usersResult && usersResult.length > 0) {
     appUsers = usersResult;
   } else {
+    console.log('📝 No users found, creating default admin...');
     // Database empty or fresh, ensure sheets exist before proceeding
-    await ensureSheetSetup();
+    try {
+      await ensureSheetSetup();
+    } catch (e) {
+      console.warn('⚠️ Sheet setup warning:', e.message);
+    }
 
     // Create default admin user
     const adminUser = { id: 'admin_' + Date.now(), nome: 'Coordinatrice', senha: 'coord2026', role: 'admin', nurseId: '' };
-    await apiWrite('Usuarios', adminUser);
+    try {
+      await apiWrite('Usuarios', adminUser);
+      console.log('✅ Default admin created');
+    } catch (e) {
+      console.error('❌ Failed to create admin:', e.message);
+      // Still use the admin locally so user can at least see the login screen
+    }
     appUsers = [adminUser];
   }
 
@@ -146,6 +196,7 @@ async function initializeData() {
   const loginSelect = document.getElementById('loginUser');
   loginSelect.innerHTML = '<option value="">Seleziona il tuo nome...</option>' +
     appUsers.map(u => `<option value="${u.id}">${u.nome}${u.role === 'admin' ? ' (Admin)' : ''}</option>`).join('');
+  console.log('✅ Login dropdown populated with', appUsers.length, 'users');
 }
 
 async function ensureSheetSetup() {
@@ -161,25 +212,87 @@ async function ensureSheetSetup() {
 
 // ── API LAYER ─────────────────────────────────────────────────
 async function apiCall(action, sheetName, body = null) {
-  if (!GOOGLE_API_URL) return null;
-  try {
-    const url = `${GOOGLE_API_URL}?action=${action}&sheetName=${sheetName}&apiKey=${API_KEY}`;
-    const opts = body ? {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify(body)
-    } : {};
-    const res = await fetch(url, opts);
-    return await res.json();
-  } catch (e) {
-    console.error('API Error:', e);
-    return null;
+  if (!GOOGLE_API_URL) {
+    throw new Error('API URL not configured');
   }
+
+  const url = `${GOOGLE_API_URL}?action=${action}&sheetName=${sheetName}&apiKey=${API_KEY}`;
+  console.log(`📡 API [${action}] → ${sheetName}`, body ? '(POST)' : '(GET)');
+
+  // Build fetch options explicitly
+  const opts = {
+    method: body ? 'POST' : 'GET',
+    redirect: 'follow', // Explicitly follow Google's 302 redirects
+  };
+
+  if (body) {
+    opts.headers = { 'Content-Type': 'text/plain;charset=utf-8' };
+    opts.body = JSON.stringify(body);
+  }
+
+  // Timeout de 30 segundos (Google Apps Script cold start pode demorar)
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 30000);
+  opts.signal = controller.signal;
+
+  let res;
+  try {
+    res = await fetch(url, opts);
+    clearTimeout(timeoutId);
+  } catch (e) {
+    clearTimeout(timeoutId);
+    if (e.name === 'AbortError') {
+      console.error('⏱️ API Timeout: Request exceeded 30 seconds');
+      throw new Error('Timeout: il server non risponde. Riprova.');
+    }
+    console.error('🌐 Network Error:', e.message);
+    throw new Error('Errore di rete: ' + e.message);
+  }
+
+  // Check HTTP status
+  if (!res.ok) {
+    console.error(`❌ API HTTP Error: ${res.status} ${res.statusText}`);
+    throw new Error(`Errore HTTP ${res.status}: ${res.statusText}`);
+  }
+
+  // Parse response safely — Google may return HTML instead of JSON
+  // (e.g., auth pages, deployment errors)
+  let responseText;
+  try {
+    responseText = await res.text();
+  } catch (e) {
+    console.error('❌ Failed to read response body:', e);
+    throw new Error('Impossibile leggere la risposta del server.');
+  }
+
+  let data;
+  try {
+    data = JSON.parse(responseText);
+  } catch (e) {
+    console.error('❌ API returned non-JSON response:', responseText.substring(0, 300));
+    // Check if it's an HTML error page from Google
+    if (responseText.includes('<!DOCTYPE') || responseText.includes('<html')) {
+      throw new Error('Il server ha restituito una pagina HTML invece di dati. Verifica che il deploy di Apps Script sia corretto e accessibile a "Chiunque".');
+    }
+    throw new Error('Risposta del server non valida (non è JSON).');
+  }
+
+  // Check API-level errors
+  if (data.status === 'error') {
+    console.error('❌ API Error:', data.message);
+    throw new Error(data.message || 'Errore sconosciuto dal server.');
+  }
+
+  console.log(`✅ API [${action}] → ${sheetName}: OK`);
+  return data;
 }
 
 async function apiRead(sheetName) {
   const result = await apiCall('read', sheetName);
-  return (result && result.status === 'success') ? result.data : [];
+  if (!result || result.status !== 'success') {
+    throw new Error(`Errore nel leggere ${sheetName}`);
+  }
+  return result.data || [];
 }
 
 async function apiWrite(sheetName, data) {
@@ -289,16 +402,22 @@ function onCalFilterChange() {
 // ── DATA LOADING ──────────────────────────────────────────────
 async function loadAllData() {
   showLoading(true);
+  let hasErrors = false;
 
   try {
     // Load nurses (normaliza colunas do Sheet)
-    const nursesData = await apiRead('Funcionarios');
-    console.log('📋 Raw Funcionarios:', nursesData);
-    if (nursesData && nursesData.length > 0) {
-      nurses = normalizeNurses(nursesData);
-      console.log('📋 Normalized nurses:', nurses);
-    } else {
-      console.warn('⚠️ Nenhum funcionário encontrado na aba Funcionarios do Google Sheets.');
+    try {
+      const nursesData = await apiRead('Funcionarios');
+      console.log('📋 Raw Funcionarios:', nursesData);
+      if (nursesData && nursesData.length > 0) {
+        nurses = normalizeNurses(nursesData);
+        console.log('📋 Normalized nurses:', nurses);
+      } else {
+        console.warn('⚠️ Nenhum funcionário encontrado na aba Funcionarios do Google Sheets.');
+      }
+    } catch (e) {
+      console.error('❌ Failed to load Funcionarios:', e.message);
+      hasErrors = true;
     }
 
     // Auto-match user by name if needed
@@ -316,23 +435,38 @@ async function loadAllData() {
     }
 
     // Load schedule
-    await loadSchedule();
-    console.log('📅 Schedule entries:', Object.keys(schedule).length);
+    try {
+      await loadSchedule();
+      console.log('📅 Schedule entries:', Object.keys(schedule).length);
+    } catch (e) {
+      console.error('❌ Failed to load Escala:', e.message);
+      hasErrors = true;
+    }
 
     // Load requests
-    const reqData = await apiRead('Solicitacoes');
-    console.log('📝 Solicitações carregadas:', reqData);
-    if (reqData) {
-      requests = reqData;
+    try {
+      const reqData = await apiRead('Solicitacoes');
+      console.log('📝 Solicitações carregadas:', reqData);
+      if (reqData) {
+        requests = reqData;
+      }
+    } catch (e) {
+      console.error('❌ Failed to load Solicitacoes:', e.message);
+      hasErrors = true;
     }
 
     // Load users if admin
     if (isAdmin) {
-      const usrData = await apiRead('Usuarios');
-      if (usrData) appUsers = usrData;
+      try {
+        const usrData = await apiRead('Usuarios');
+        if (usrData) appUsers = usrData;
+      } catch (e) {
+        console.error('❌ Failed to reload Usuarios:', e.message);
+        hasErrors = true;
+      }
     }
 
-    // Render
+    // Render (always render with whatever data we have)
     renderCalendar();
     renderRequests();
     populateFilterNurse();
@@ -340,10 +474,14 @@ async function loadAllData() {
     if (isAdmin) renderAdminUsers();
     updateBadges();
 
-    toast('Dados sincronizados', 'success');
+    if (hasErrors) {
+      toast('Alcuni dati non sono stati caricati', 'warning');
+    } else {
+      toast('Dati sincronizzati', 'success');
+    }
   } catch (e) {
-    console.error('Load error:', e);
-    toast('Erro ao carregar dados', 'error');
+    console.error('❌ Critical load error:', e);
+    toast('Errore critico nel caricamento', 'error');
   }
 
   showLoading(false);
@@ -871,14 +1009,15 @@ async function submitNewRequest() {
   };
 
   showLoading(true);
-  const result = await apiWrite('Solicitacoes', req);
-  if (result && result.status === 'success') {
+  try {
+    await apiWrite('Solicitacoes', req);
     requests.push(req);
     renderRequests();
     updateBadges();
     closeModal('newReqModal');
     toast('Richiesta inviata!', 'success');
-  } else {
+  } catch (e) {
+    console.error('❌ submitNewRequest:', e.message);
     toast("Errore durante l'invio della richiesta", 'error');
   }
   showLoading(false);
@@ -887,13 +1026,12 @@ async function submitNewRequest() {
 // ── APPROVE / REJECT ──────────────────────────────────────────
 async function approveRequest(id) {
   showLoading(true);
-  const result = await apiUpdate('Solicitacoes', 'id', id, {
-    status: 'approved',
-    approvedAt: new Date().toISOString(),
-    approvedBy: currentUser.nome
-  });
-
-  if (result && result.status === 'success') {
+  try {
+    await apiUpdate('Solicitacoes', 'id', id, {
+      status: 'approved',
+      approvedAt: new Date().toISOString(),
+      approvedBy: currentUser.nome
+    });
     const req = requests.find(r => String(r.id) === String(id));
     if (req) {
       req.status = 'approved';
@@ -903,7 +1041,8 @@ async function approveRequest(id) {
     renderRequests();
     updateBadges();
     toast('Richiesta approvata!', 'success');
-  } else {
+  } catch (e) {
+    console.error('❌ approveRequest:', e.message);
     toast("Errore durante l'approvazione", 'error');
   }
   showLoading(false);
@@ -911,13 +1050,12 @@ async function approveRequest(id) {
 
 async function rejectRequest(id) {
   showLoading(true);
-  const result = await apiUpdate('Solicitacoes', 'id', id, {
-    status: 'rejected',
-    approvedAt: new Date().toISOString(),
-    approvedBy: currentUser.nome
-  });
-
-  if (result && result.status === 'success') {
+  try {
+    await apiUpdate('Solicitacoes', 'id', id, {
+      status: 'rejected',
+      approvedAt: new Date().toISOString(),
+      approvedBy: currentUser.nome
+    });
     const req = requests.find(r => String(r.id) === String(id));
     if (req) {
       req.status = 'rejected';
@@ -927,7 +1065,8 @@ async function rejectRequest(id) {
     renderRequests();
     updateBadges();
     toast('Richiesta rifiutata', 'warning');
-  } else {
+  } catch (e) {
+    console.error('❌ rejectRequest:', e.message);
     toast('Errore durante il rifiuto', 'error');
   }
   showLoading(false);
@@ -936,13 +1075,14 @@ async function rejectRequest(id) {
 async function deleteRequest(id) {
   if (!confirm('Sei sicuro di voler eliminare questa richiesta?')) return;
   showLoading(true);
-  const result = await apiDelete('Solicitacoes', 'id', id);
-  if (result && result.status === 'success') {
+  try {
+    await apiDelete('Solicitacoes', 'id', id);
     requests = requests.filter(r => String(r.id) !== String(id));
     renderRequests();
     updateBadges();
     toast('Richiesta eliminata', 'info');
-  } else {
+  } catch (e) {
+    console.error('❌ deleteRequest:', e.message);
     toast("Errore durante l'eliminazione", 'error');
   }
   showLoading(false);
@@ -1022,13 +1162,14 @@ async function submitNewUser() {
   };
 
   showLoading(true);
-  const result = await apiWrite('Usuarios', newUser);
-  if (result && result.status === 'success') {
+  try {
+    await apiWrite('Usuarios', newUser);
     appUsers.push(newUser);
     renderAdminUsers();
     closeModal('addUserModal');
     toast(`${nome} registrato!`, 'success');
-  } else {
+  } catch (e) {
+    console.error('❌ submitNewUser:', e.message);
     toast('Errore di registrazione', 'error');
   }
   showLoading(false);
@@ -1058,8 +1199,8 @@ async function submitEditUser() {
   if (senha) updates.senha = senha;
 
   showLoading(true);
-  const result = await apiUpdate('Usuarios', 'id', id, updates);
-  if (result && result.status === 'success') {
+  try {
+    await apiUpdate('Usuarios', 'id', id, updates);
     const user = appUsers.find(u => String(u.id) === String(id));
     if (user) {
       user.nome = nome;
@@ -1069,7 +1210,8 @@ async function submitEditUser() {
     renderAdminUsers();
     closeModal('editUserModal');
     toast('Utente aggiornato!', 'success');
-  } else {
+  } catch (e) {
+    console.error('❌ submitEditUser:', e.message);
     toast("Errore durante l'aggiornamento", 'error');
   }
   showLoading(false);
@@ -1087,13 +1229,14 @@ async function deleteUser() {
   if (!confirm(`Eliminare ${user?.nome}?`)) return;
 
   showLoading(true);
-  const result = await apiDelete('Usuarios', 'id', id);
-  if (result && result.status === 'success') {
+  try {
+    await apiDelete('Usuarios', 'id', id);
     appUsers = appUsers.filter(u => String(u.id) !== String(id));
     renderAdminUsers();
     closeModal('editUserModal');
     toast('Utente eliminato', 'info');
-  } else {
+  } catch (e) {
+    console.error('❌ deleteUser:', e.message);
     toast("Errore durante l'eliminazione", 'error');
   }
   showLoading(false);

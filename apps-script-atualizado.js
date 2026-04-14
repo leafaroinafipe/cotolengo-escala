@@ -105,14 +105,32 @@ function createJsonResponse(responseObject) {
 // ── FUNÇÕES DE DADOS ──────────────────────────────────────────
 
 function readData(sheet) {
+  var lastRow = sheet.getLastRow();
+  var lastCol = sheet.getLastColumn();
+  
+  // Planilha completamente vazia (sem nenhuma célula preenchida)
+  if (lastRow === 0 || lastCol === 0) return [];
+  
   var rows = sheet.getDataRange().getValues();
   if (rows.length === 0) return [];
   
   var headers = rows[0];
+  
+  // Verifica se os headers são todos vazios (aba recém-criada)
+  var hasRealHeaders = headers.some(function(h) { return h !== "" && h !== null && h !== undefined; });
+  if (!hasRealHeaders) return [];
+  
+  // Somente header existe, sem dados
+  if (rows.length <= 1) return [];
+  
   var dataBuffer = [];
   
   for (var i = 1; i < rows.length; i++) {
     var rowData = rows[i];
+    // Pula linhas completamente vazias
+    var isEmptyRow = rowData.every(function(c) { return c === "" || c === null || c === undefined; });
+    if (isEmptyRow) continue;
+    
     var record = {};
     for (var j = 0; j < headers.length; j++) {
       record[headers[j]] = rowData[j];
@@ -123,13 +141,24 @@ function readData(sheet) {
 }
 
 function writeData(sheet, dataObject) {
-  var rows = sheet.getDataRange().getValues();
-  var headers = rows[0];
+  var lastRow = sheet.getLastRow();
+  var lastCol = sheet.getLastColumn();
+  var headers;
   
-  // Se a aba está vazia (sem headers), cria os headers a partir das chaves do objeto
-  if (rows.length === 0 || (rows.length === 1 && rows[0].every(function(c) { return c === ""; }))) {
+  // Se a aba está completamente vazia ou com headers todos vazios
+  if (lastRow === 0 || lastCol === 0) {
     headers = Object.keys(dataObject);
     sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+  } else {
+    var rows = sheet.getDataRange().getValues();
+    headers = rows[0];
+    
+    // Headers todos vazios — recriar
+    var hasRealHeaders = headers.some(function(h) { return h !== "" && h !== null && h !== undefined; });
+    if (!hasRealHeaders) {
+      headers = Object.keys(dataObject);
+      sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+    }
   }
   
   var newRow = [];

@@ -208,6 +208,19 @@ body {
   pointer-events: none;
   z-index: 1;
 }
+.input-icon.pw-toggle {
+  pointer-events: auto;
+  cursor: pointer;
+  left: auto;
+  right: 12px;
+  font-size: 18px;
+  user-select: none;
+  -webkit-user-select: none;
+  transition: transform 0.2s;
+}
+.input-icon.pw-toggle:active {
+  transform: scale(0.85);
+}
 .login-input {
   width: 100%;
   padding: 14px 16px 14px 44px;
@@ -478,14 +491,76 @@ body {
   position: sticky;
   top: -16px; /* Negates the 16px top padding of page-content */
   z-index: 30; /* Increased to stay above dots/cards */
-  background: var(--bg-deep); /* Use solid background */
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  background: rgba(13, 11, 24, 0.75); /* Semi-transparent instead of solid */
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
   padding: 16px 0 10px;
   margin-top: -16px;
-  border-bottom: 1px solid rgba(255,255,255,0.08);
-  box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.2);
 }
+
+.filter-bar .page-title,
+.filter-bar .field-label {
+  text-align: center;
+}
+
+.filter-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.filter-row .field-label {
+  font-size: 10px;
+  font-weight: 800;
+  color: var(--text-3);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 4px;
+  display: block;
+  text-align: center;
+}
+
+/* Filter Chips */
+.filter-chip-group {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.filter-chip {
+  padding: 8px 16px;
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-full);
+  color: var(--text-2);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font);
+}
+.filter-chip.active {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: white;
+  box-shadow: 0 4px 12px rgba(139,92,246,0.3);
+}
+.filter-chip:active { transform: scale(0.95); }
+
+.chip-badge {
+  background: rgba(255,255,255,0.2);
+  padding: 1px 6px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 800;
+}
+.filter-chip.active .chip-badge { background: rgba(255,255,255,0.3); }
 
 /* ── CALENDAR MONTH GRID ─────────────────────────── */
 .cal-month-grid {

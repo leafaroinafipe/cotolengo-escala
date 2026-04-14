@@ -164,36 +164,24 @@
             <div class="swipe-page" id="pageRequests">
                 <div class="page-content">
                     <div class="req-header-section">
-                        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px;">
-                            <div>
-                                <h2 class="page-title">Richieste</h2>
-                                <p class="page-subtitle">Ferie, riposi e cambi turno</p>
-                            </div>
-                            <button onclick="openNewRequestModal()" class="btn-primary-action">
-                                <span>Nuova Richiesta</span>
-                                <i>+</i>
-                            </button>
-                        </div>
+                        <h2 class="page-title">Richieste</h2>
+                        <p class="page-subtitle">Gestisci ferie, riposi e cambi turno</p>
                     </div>
 
                     <!-- Filters -->
                     <div class="filter-bar" id="filterBar">
-                        <div class="filter-row">
-                            <div class="filter-select-wrap">
-                                <label class="field-label">Stato</label>
-                                <select id="filterStatus" class="filter-select" onchange="applyFilters()">
-                                    <option value="all">📊 Tutti gli Stati</option>
-                                    <option value="pending">⏳ In attesa</option>
-                                    <option value="approved">✅ Approvati</option>
-                                    <option value="rejected">❌ Rifiutati</option>
-                                </select>
-                            </div>
-                            <div class="filter-select-wrap">
-                                <label class="field-label">Dipendente</label>
-                                <select id="filterNurse" class="filter-select" onchange="applyFilters()">
-                                    <option value="all">👤 Tutti i dipendenti</option>
-                                </select>
-                            </div>
+                        <div class="filter-chip-group">
+                            <button class="filter-chip active" data-filter="all" onclick="setStatusFilter('all', this)">Tutti</button>
+                            <button class="filter-chip" data-filter="pending" onclick="setStatusFilter('pending', this)">
+                                ⏳ In attesa <span class="chip-badge" id="pendingCount">0</span>
+                            </button>
+                            <button class="filter-chip" data-filter="approved" onclick="setStatusFilter('approved', this)">✅ Approvati</button>
+                            <button class="filter-chip" data-filter="rejected" onclick="setStatusFilter('rejected', this)">❌ Rifiutati</button>
+                        </div>
+                        <div class="filter-select-wrap">
+                            <select id="filterNurse" class="filter-select" onchange="applyFilters()">
+                                <option value="all">👤 Tutti i dipendenti</option>
+                            </select>
                         </div>
                     </div>
 
@@ -205,6 +193,11 @@
                         </div>
                     </div>
                 </div>
+
+                <!-- FAB - New Request -->
+                <button class="fab" id="fabNewReq" onclick="openNewRequestModal()">
+                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
+                </button>
             </div>
 
             <!-- ═══ PAGE 3: GESTÃO DE USUÁRIOS (ADMIN ONLY) ═══ -->

@@ -1,9 +1,9 @@
 // ============================================================
-//  Cotolengo Turni — Service Worker v2.0
-//  Cache offline para o PWA — Auto-versionamento por timestamp
+//  Cotolengo Turni — Service Worker v3.0
+//  Cache offline para o PWA — API calls bypass SW completely
 // ============================================================
 
-const CACHE_VERSION = '2';
+const CACHE_VERSION = '3';
 const CACHE_NAME = `cotolengo-turni-v${CACHE_VERSION}`;
 const ASSETS = [
   './',
@@ -31,25 +31,29 @@ self.addEventListener('activate', (e) => {
 });
 
 self.addEventListener('fetch', (e) => {
-  // Network-first for API calls, stale-while-revalidate for assets
-  if (e.request.url.includes('script.google.com')) {
-    e.respondWith(
-      fetch(e.request).catch(() => caches.match(e.request))
-    );
-  } else {
-    // Stale-while-revalidate: serve cache immediately, update in background
-    e.respondWith(
-      caches.open(CACHE_NAME).then(cache => {
-        return cache.match(e.request).then(cached => {
-          const fetchPromise = fetch(e.request).then(response => {
-            if (response && response.status === 200) {
-              cache.put(e.request, response.clone());
-            }
-            return response;
-          }).catch(() => cached);
-          return cached || fetchPromise;
-        });
-      })
-    );
+  const url = e.request.url;
+
+  // ── CRITICAL: Never intercept API calls ──
+  // Google Apps Script redirects to googleusercontent.com,
+  // and intercepting either domain causes CORS/redirect failures.
+  if (url.includes('script.google.com') || 
+      url.includes('googleusercontent.com') ||
+      url.includes('googleapis.com')) {
+    return; // Let the browser handle it natively
   }
+
+  // Stale-while-revalidate for static assets only
+  e.respondWith(
+    caches.open(CACHE_NAME).then(cache => {
+      return cache.match(e.request).then(cached => {
+        const fetchPromise = fetch(e.request).then(response => {
+          if (response && response.status === 200) {
+            cache.put(e.request, response.clone());
+          }
+          return response;
+        }).catch(() => cached);
+        return cached || fetchPromise;
+      });
+    })
+  );
 });

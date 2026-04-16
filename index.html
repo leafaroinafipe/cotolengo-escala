@@ -76,7 +76,16 @@
                     <div class="input-icon-wrap">
                         <span class="input-icon">🔒</span>
                         <input type="password" id="loginPass" class="login-input" placeholder="Inserisci la password">
-                        <span class="input-icon pw-toggle" onclick="togglePassword()" style="right: 12px; left: auto; cursor: pointer;">👁️</span>
+                        <button type="button" class="pw-toggle-btn" id="pwToggleBtn" onclick="togglePassword()" aria-label="Mostra/nascondi password">
+                            <svg id="eyeOpen" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                                <circle cx="12" cy="12" r="3"/>
+                            </svg>
+                            <svg id="eyeClosed" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none">
+                                <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
+                                <line x1="1" y1="1" x2="23" y2="23"/>
+                            </svg>
+                        </button>
                     </div>
                 </div>
                 <button id="loginBtn" class="login-btn" onclick="doLogin()">
@@ -163,20 +172,25 @@
             <!-- ═══ PAGE 2: SOLICITAÇÕES ═══ -->
             <div class="swipe-page" id="pageRequests">
                 <div class="page-content">
-                    <div class="req-header-section">
-                        <h2 class="page-title">Richieste</h2>
-                        <p class="page-subtitle">Gestisci ferie, riposi e cambi turno</p>
+                    <div class="req-header-section req-header-row">
+                        <div>
+                            <h2 class="page-title">Richieste</h2>
+                            <p class="page-subtitle">Gestisci ferie, riposi e cambi turno</p>
+                        </div>
+                        <button class="header-action-btn" id="fabNewReq" onclick="openNewRequestModal()" title="Nuova richiesta">
+                            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
+                        </button>
                     </div>
 
                     <!-- Filters -->
                     <div class="filter-bar" id="filterBar">
-                        <div class="filter-chip-group">
+                        <div class="filter-chip-group filter-chip-compact">
                             <button class="filter-chip active" data-filter="all" onclick="setStatusFilter('all', this)">Tutti</button>
                             <button class="filter-chip" data-filter="pending" onclick="setStatusFilter('pending', this)">
-                                ⏳ In attesa <span class="chip-badge" id="pendingCount">0</span>
+                                ⏳ <span class="chip-badge" id="pendingCount">0</span>
                             </button>
-                            <button class="filter-chip" data-filter="approved" onclick="setStatusFilter('approved', this)">✅ Approvati</button>
-                            <button class="filter-chip" data-filter="rejected" onclick="setStatusFilter('rejected', this)">❌ Rifiutati</button>
+                            <button class="filter-chip" data-filter="approved" onclick="setStatusFilter('approved', this)">✅</button>
+                            <button class="filter-chip" data-filter="rejected" onclick="setStatusFilter('rejected', this)">❌</button>
                         </div>
                         <div class="filter-select-wrap">
                             <select id="filterNurse" class="filter-select" onchange="applyFilters()">
@@ -193,19 +207,24 @@
                         </div>
                     </div>
                 </div>
-
-                <!-- FAB - New Request -->
-                <button class="fab" id="fabNewReq" onclick="openNewRequestModal()">
-                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
-                </button>
             </div>
 
             <!-- ═══ PAGE 3: GESTÃO DE USUÁRIOS (ADMIN ONLY) ═══ -->
             <div class="swipe-page" id="pageAdmin">
                 <div class="page-content">
-                    <div class="req-header-section">
-                        <h2 class="page-title">Gestione Accessi</h2>
-                        <p class="page-subtitle">Registra, modifica o rimuovi utenti dall'app</p>
+                    <div class="req-header-section req-header-row">
+                        <div>
+                            <h2 class="page-title">Gestione Accessi</h2>
+                            <p class="page-subtitle">Registra, modifica o rimuovi utenti dall'app</p>
+                        </div>
+                        <button class="header-action-btn" onclick="openAddUserModal()" title="Nuovo utente">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                                <circle cx="8.5" cy="7" r="4"/>
+                                <line x1="20" y1="8" x2="20" y2="14"/>
+                                <line x1="23" y1="11" x2="17" y2="11"/>
+                            </svg>
+                        </button>
                     </div>
 
                     <!-- Users List -->
@@ -216,16 +235,6 @@
                         </div>
                     </div>
                 </div>
-
-                <!-- FAB - Add User -->
-                <button class="fab" onclick="openAddUserModal()">
-                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
-                        <circle cx="8.5" cy="7" r="4"/>
-                        <line x1="20" y1="8" x2="20" y2="14"/>
-                        <line x1="23" y1="11" x2="17" y2="11"/>
-                    </svg>
-                </button>
             </div>
         </div>
     </div>

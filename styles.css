@@ -208,18 +208,28 @@ body {
   pointer-events: none;
   z-index: 1;
 }
-.input-icon.pw-toggle {
-  pointer-events: auto;
+.pw-toggle-btn {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  padding: 6px;
   cursor: pointer;
-  left: auto;
-  right: 12px;
-  font-size: 18px;
-  user-select: none;
-  -webkit-user-select: none;
-  transition: transform 0.2s;
+  color: var(--text-3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2;
+  -webkit-tap-highlight-color: transparent;
+  transition: color 0.2s;
 }
-.input-icon.pw-toggle:active {
-  transform: scale(0.85);
+.pw-toggle-btn:active {
+  color: var(--primary-light);
+}
+.pw-toggle-btn svg {
+  pointer-events: none;
 }
 .login-input {
   width: 100%;
@@ -235,6 +245,9 @@ body {
   transition: all 0.2s;
   -webkit-appearance: none;
   appearance: none;
+}
+#loginPass {
+  padding-right: 44px;
 }
 .login-input:focus {
   border-color: var(--primary);
@@ -530,7 +543,7 @@ body {
   justify-content: center;
 }
 .filter-chip {
-  padding: 8px 16px;
+  padding: 8px 14px;
   background: var(--glass);
   border: 1px solid var(--glass-border);
   border-radius: var(--radius-full);
@@ -542,7 +555,7 @@ body {
   transition: all 0.2s;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   font-family: var(--font);
 }
 .filter-chip.active {
@@ -552,6 +565,17 @@ body {
   box-shadow: 0 4px 12px rgba(139,92,246,0.3);
 }
 .filter-chip:active { transform: scale(0.95); }
+
+/* Compact filter chips — single row */
+.filter-chip-compact {
+  flex-wrap: nowrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.filter-chip-compact .filter-chip {
+  padding: 7px 12px;
+  font-size: 13px;
+}
 
 .chip-badge {
   background: rgba(255,255,255,0.2);
@@ -729,8 +753,34 @@ body {
 
 /* ── REQUESTS PAGE ────────────────────────────────── */
 .req-header-section { margin-bottom: 16px; }
+.req-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
 .page-title    { font-size: 22px; font-weight: 800; letter-spacing: -0.3px; }
 .page-subtitle { font-size: 13px; color: var(--text-3); margin-top: 2px; }
+
+/* Header Action Button (replaces FAB) */
+.header-action-btn {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+  border: none;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 4px 16px rgba(139,92,246,0.4);
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+.header-action-btn:active {
+  transform: scale(0.9);
+  box-shadow: 0 2px 8px rgba(139,92,246,0.3);
+}
 
 .btn-primary-action {
   background: var(--primary);

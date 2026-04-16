@@ -106,13 +106,16 @@ function installApp() {
 
 function togglePassword() {
   const input = document.getElementById('loginPass');
-  const toggle = document.querySelector('.pw-toggle');
+  const eyeOpen = document.getElementById('eyeOpen');
+  const eyeClosed = document.getElementById('eyeClosed');
   if (input.type === 'password') {
     input.type = 'text';
-    if (toggle) toggle.textContent = '🙈';
+    if (eyeOpen) eyeOpen.style.display = 'none';
+    if (eyeClosed) eyeClosed.style.display = 'block';
   } else {
     input.type = 'password';
-    if (toggle) toggle.textContent = '👁️';
+    if (eyeOpen) eyeOpen.style.display = 'block';
+    if (eyeClosed) eyeClosed.style.display = 'none';
   }
 }
 
@@ -382,16 +385,14 @@ function buildCalendarFilter() {
 function populateCalendarFilter() {
   const sel = document.getElementById('calNurseFilter');
   if (!sel) return;
-  // Non-admin: auto-select their own nurse; admin: default to "all"
-  if (!isAdmin && currentUser && currentUser.nurseId) {
-    sel.innerHTML = nurses.map(n => `<option value="${n.id}">${n.name}</option>`).join('');
-    sel.value = currentUser.nurseId;
-    calNurseFilter = currentUser.nurseId;
-  } else {
-    sel.innerHTML = '<option value="all">👥 Tutti i dipendenti</option>' +
-      nurses.map(n => `<option value="${n.id}">${n.name}</option>`).join('');
-    sel.value = calNurseFilter;
+  // Everyone sees all employees + their own selection
+  sel.innerHTML = '<option value="all">👥 Tutti i dipendenti</option>' +
+    nurses.map(n => `<option value="${n.id}">${n.name}</option>`).join('');
+  // Non-admin: default to their own nurse if they haven't changed the filter
+  if (!isAdmin && currentUser && currentUser.nurseId && calNurseFilter === 'all') {
+    // Keep "all" as default so they can see everyone
   }
+  sel.value = calNurseFilter;
 }
 
 function onCalFilterChange() {

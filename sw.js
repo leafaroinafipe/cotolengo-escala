@@ -3,8 +3,8 @@
 //  Cache offline para o PWA — API calls bypass SW completely
 // ============================================================
 
-const CACHE_VERSION = '3';
-const CACHE_NAME = `cotolengo-turni-v${CACHE_VERSION}`;
+const CACHE_VERSION = '6';
+const CACHE_NAME = `cotolengo-escala-${CACHE_VERSION}`;
 const ASSETS = [
   './',
   './index.html',

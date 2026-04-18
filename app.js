@@ -500,7 +500,8 @@ async function loadSchedule() {
   data.forEach(row => {
     const rowMonth = parseInt(row.month);
     const rowYear = parseInt(row.year);
-    if (rowMonth === m && rowYear === y) {
+    // row.month comes from Sheets (1 to 12). m is 0 to 11.
+    if (String(row.month) === String(m + 1) && String(row.year) === String(y)) {
       for (let d = 1; d <= 31; d++) {
         const val = row['d' + d];
         if (val && val !== '' && val !== 'undefined') {
@@ -778,6 +779,13 @@ function closeDayDetail() {
 
 // ── REQUESTS ──────────────────────────────────────────────────
 function populateFilterNurse() {
+  const selWrap = document.querySelector('#filterNurse').parentElement;
+  if (!isAdmin) {
+    if (selWrap) selWrap.style.display = 'none';
+  } else {
+    if (selWrap) selWrap.style.display = 'block';
+  }
+  
   const sel = document.getElementById('filterNurse');
   sel.innerHTML = '<option value="all">👤 Tutti i dipendenti</option>' +
     nurses.map(n => `<option value="${n.id}">${n.name}</option>`).join('');
@@ -800,15 +808,20 @@ function renderRequests() {
   const list = document.getElementById('reqList');
 
   let filtered = [...requests];
+  
+  // Nurse visibility for non-admins
+  if (!isAdmin && currentUser) {
+    filtered = filtered.filter(r => String(r.nurseId) === String(currentUser.nurseId) || String(r.fromNurseId) === String(currentUser.nurseId));
+  }
 
   // Status filter
   if (statusFilter !== 'all') {
     filtered = filtered.filter(r => r.status === statusFilter);
   }
 
-  // Nurse filter
-  if (nurseFilter !== 'all') {
-    filtered = filtered.filter(r => r.nurseId === nurseFilter || r.fromNurseId === nurseFilter);
+  // Nurse filter (Admin only)
+  if (isAdmin && nurseFilter !== 'all') {
+    filtered = filtered.filter(r => String(r.nurseId) === String(nurseFilter) || String(r.fromNurseId) === String(nurseFilter));
   }
 
   if (filtered.length === 0) {

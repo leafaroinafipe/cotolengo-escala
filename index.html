@@ -172,30 +172,32 @@
             <!-- ═══ PAGE 2: SOLICITAÇÕES ═══ -->
             <div class="swipe-page" id="pageRequests">
                 <div class="page-content">
-                    <div class="req-header-section req-header-row">
-                        <div>
-                            <h2 class="page-title">Richieste</h2>
-                            <p class="page-subtitle">Gestisci ferie, riposi e cambi turno</p>
-                        </div>
-                        <button class="header-action-btn" id="fabNewReq" onclick="openNewRequestModal()" title="Nuova richiesta">
-                            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
-                        </button>
-                    </div>
-
-                    <!-- Filters -->
-                    <div class="filter-bar" id="filterBar">
-                        <div class="filter-chip-group filter-chip-compact">
-                            <button class="filter-chip active" data-filter="all" onclick="setStatusFilter('all', this)">Tutti</button>
-                            <button class="filter-chip" data-filter="pending" onclick="setStatusFilter('pending', this)">
-                                ⏳ <span class="chip-badge" id="pendingCount">0</span>
+                    <div class="req-sticky-top">
+                        <div class="req-header-section req-header-row">
+                            <div>
+                                <h2 class="page-title">Richieste</h2>
+                                <p class="page-subtitle">Gestisci ferie, riposi e cambi turno</p>
+                            </div>
+                            <button class="header-action-btn" id="fabNewReq" onclick="openNewRequestModal()" title="Nuova richiesta">
+                                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
                             </button>
-                            <button class="filter-chip" data-filter="approved" onclick="setStatusFilter('approved', this)">✅</button>
-                            <button class="filter-chip" data-filter="rejected" onclick="setStatusFilter('rejected', this)">❌</button>
                         </div>
-                        <div class="filter-select-wrap">
-                            <select id="filterNurse" class="filter-select" onchange="applyFilters()">
-                                <option value="all">👤 Tutti i dipendenti</option>
-                            </select>
+
+                        <!-- Filters -->
+                        <div class="filter-bar" id="filterBar">
+                            <div class="filter-chip-group filter-chip-compact">
+                                <button class="filter-chip active" data-filter="all" onclick="setStatusFilter('all', this)">Tutti</button>
+                                <button class="filter-chip" data-filter="pending" onclick="setStatusFilter('pending', this)">
+                                    ⏳ <span class="chip-badge" id="pendingCount">0</span>
+                                </button>
+                                <button class="filter-chip" data-filter="approved" onclick="setStatusFilter('approved', this)">✅</button>
+                                <button class="filter-chip" data-filter="rejected" onclick="setStatusFilter('rejected', this)">❌</button>
+                            </div>
+                            <div class="filter-select-wrap">
+                                <select id="filterNurse" class="filter-select" onchange="applyFilters()">
+                                    <option value="all">👤 Tutti i dipendenti</option>
+                                </select>
+                            </div>
                         </div>
                     </div>
 

@@ -17,21 +17,20 @@ async function sha256(text) {
     const hashArray = Array.from(new Uint8Array(hashBuffer));
     return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
   } catch (e) {
-    // Fallback simples se crypto.subtle não estiver disponível
+    // Fallback para iOS em contextos não-HTTPS
     console.warn('crypto.subtle not available, using simple hash');
     let hash = 0;
     for (let i = 0; i < text.length; i++) {
       const char = text.charCodeAt(i);
       hash = ((hash << 5) - hash) + char;
-      hash = hash & hash; // Convert to 32bit integer
+      hash = hash & hash;
     }
     return Math.abs(hash).toString(16);
   }
 }
 
-// ── UTILS: Gerar ID único (com fallback para iOS) ────────────
+// ── UTILS: Gerar ID único (com fallback iOS) ────────────────
 function generateId() {
-  // Tenta usar crypto.randomUUID() primeiro (mais seguro)
   try {
     if (typeof crypto !== 'undefined' && crypto.randomUUID) {
       return crypto.randomUUID();
@@ -39,8 +38,7 @@ function generateId() {
   } catch (e) {
     console.warn('crypto.randomUUID not available');
   }
-  
-  // Fallback robusto para iOS e navegadores antigos
+  // Fallback robusto
   const timestamp = Date.now();
   const random = Math.random().toString(36).substring(2, 11);
   const random2 = Math.random().toString(36).substring(2, 11);
@@ -80,26 +78,6 @@ let statusFilter = 'all';
 let nurseFilter = 'all';
 let calNurseFilter = 'all'; // filtro de funcionário no calendário (admin)
 
-// ── iOS SPECIFIC OPTIMIZATIONS ───────────────────────────────
-// Previne scroll bounce no iOS
-function preventIOSBounce() {
-  let preventScroll = false;
-  
-  document.body.addEventListener('touchstart', function(e) {
-    if (e.target.closest('.swipe-container, .modal-body, .page-content')) {
-      // Permitir scroll normal em áreas scrolláveis
-      return;
-    }
-    preventScroll = false;
-  });
-
-  document.body.addEventListener('touchmove', function(e) {
-    if (preventScroll) {
-      e.preventDefault();
-    }
-  }, { passive: false });
-}
-
 // ── HELPERS: Normalizar dados do Sheet ───────────────────────
 // O Sheet usa colunas ID_Funcionario / Nome, mas o app interno usa id / name
 function getNurseId(n) { return n.id || n.ID_Funcionario || n.Id || n.ID || ''; }
@@ -116,11 +94,9 @@ function normalizeNurses(rawList) {
 // ── INIT ──────────────────────────────────────────────────────
 function bootstrap() {
   registerServiceWorker();
-  preventIOSBounce();
-  checkSavedSession();
+  initInstallUI();
   showSplash();
 }
-
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', bootstrap);
 } else {
@@ -141,191 +117,133 @@ function registerServiceWorker() {
   }
 }
 
-// PWA Install prompt
-let deferredPrompt;
-let isIOS = false;
-let isAndroid = false;
+// ============================================================
+// ── PWA INSTALL SYSTEM (iOS + Android) ──────────────────────
+// ============================================================
 
-// Detectar plataforma
-function detectPlatform() {
-  const userAgent = navigator.userAgent || navigator.vendor || window.opera;
-  isIOS = /iPad|iPhone|iPod/.test(userAgent) && !window.MSStream;
-  isAndroid = /android/i.test(userAgent);
-  
-  console.log('🔍 Platform detected:', { isIOS, isAndroid });
-  return { isIOS, isAndroid };
+// Platform detection
+const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+const isAndroid = /Android/.test(navigator.userAgent);
+
+// Check if already installed as PWA
+function isStandalone() {
+  return window.navigator.standalone === true || 
+         window.matchMedia('(display-mode: standalone)').matches ||
+         window.matchMedia('(display-mode: fullscreen)').matches ||
+         document.referrer.startsWith('android-app://');
 }
 
-// Verificar se já está instalado
-function isPWAInstalled() {
-  // Standalone mode (já instalado)
-  if (window.matchMedia('(display-mode: standalone)').matches) {
-    return true;
-  }
-  // iOS standalone
-  if (window.navigator.standalone === true) {
-    return true;
-  }
-  return false;
-}
+let deferredPrompt = null;
+let installPromptReady = false;
 
-// Verificar se usuário já dispensou o banner
-function wasInstallBannerDismissed() {
-  try {
-    const dismissed = localStorage.getItem('installBannerDismissed');
-    if (dismissed) {
-      const dismissedTime = parseInt(dismissed);
-      const daysSinceDismissed = (Date.now() - dismissedTime) / (1000 * 60 * 60 * 24);
-      // Mostrar novamente após 7 dias
-      return daysSinceDismissed < 7;
-    }
-  } catch (e) {
-    console.warn('localStorage not available:', e);
-  }
-  return false;
-}
-
-// Mostrar banner de instalação
-function showInstallBanner() {
-  if (isPWAInstalled()) {
-    console.log('✅ PWA already installed');
-    return;
-  }
-  
-  if (wasInstallBannerDismissed()) {
-    console.log('⏭️ Install banner was dismissed recently');
-    return;
-  }
-  
-  const banner = document.getElementById('installBanner');
-  if (banner) {
-    // Delay de 3 segundos para não ser intrusivo
-    setTimeout(() => {
-      banner.classList.remove('hidden');
-    }, 3000);
-  }
-}
-
-// Android: beforeinstallprompt event
+// Android: Capture the native install prompt
 window.addEventListener('beforeinstallprompt', (e) => {
   e.preventDefault();
   deferredPrompt = e;
+  installPromptReady = true;
+  console.log('✅ PWA install prompt ready (Android)');
+  updateInstallUI();
+});
+
+// Detect when app was successfully installed
+window.addEventListener('appinstalled', () => {
+  console.log('✅ PWA installed successfully');
+  deferredPrompt = null;
+  hideAllInstallUI();
+  toast('App installata con successo! 🎉', 'success');
+  try { localStorage.removeItem('install_banner_dismissed'); } catch (e) {}
+});
+
+// Show/hide install UI based on platform and state
+function updateInstallUI() {
+  if (isStandalone()) {
+    hideAllInstallUI();
+    return;
+  }
+  if (installPromptReady && deferredPrompt) {
+    showInstallButtons();
+    showLoginBanner();
+    return;
+  }
+  if (isIOS) {
+    showInstallButtons();
+    showLoginBanner();
+    return;
+  }
+  hideAllInstallUI();
+}
+
+function showInstallButtons() {
+  const headerBtn = document.getElementById('installPwaBtn');
+  if (headerBtn) headerBtn.style.display = 'flex';
+  const loginBtn = document.getElementById('loginInstallBtn');
+  if (loginBtn) loginBtn.style.display = 'flex';
+}
+
+function showLoginBanner() {
+  let dismissed = false;
+  try {
+    dismissed = localStorage.getItem('install_banner_dismissed') === 'true';
+  } catch (e) {}
+  if (dismissed) return;
   
-  console.log('💾 beforeinstallprompt event fired');
-  
-  // Esconder botão do header e mostrar banner
+  const banner = document.getElementById('loginInstallBanner');
+  if (banner) {
+    setTimeout(() => banner.classList.add('visible'), 800);
+  }
+}
+
+function hideAllInstallUI() {
   const headerBtn = document.getElementById('installPwaBtn');
   if (headerBtn) headerBtn.style.display = 'none';
-  
-  showInstallBanner();
-});
-
-// Trigger instalação
-async function triggerInstall() {
-  const platform = detectPlatform();
-  
-  if (deferredPrompt && isAndroid) {
-    // Android: usar prompt nativo
-    console.log('📱 Showing Android install prompt');
-    deferredPrompt.prompt();
-    const { outcome } = await deferredPrompt.userChoice;
-    console.log(`👤 User response: ${outcome}`);
-    
-    if (outcome === 'accepted') {
-      dismissInstallBanner(true);
-    }
-    deferredPrompt = null;
-  } else if (isIOS) {
-    // iOS: mostrar instruções
-    console.log('📱 Showing iOS install instructions');
-    const modal = document.getElementById('pwaInstallModal');
-    const iosInstructions = document.getElementById('iosInstructions');
-    const androidInstructions = document.getElementById('androidInstructions');
-    
-    if (modal && iosInstructions && androidInstructions) {
-      iosInstructions.style.display = 'block';
-      androidInstructions.style.display = 'none';
-      modal.classList.remove('hidden');
-      dismissInstallBanner(false);
-    }
-  } else if (isAndroid) {
-    // Android mas sem prompt: mostrar instruções
-    console.log('📱 Showing Android install instructions');
-    const modal = document.getElementById('pwaInstallModal');
-    const iosInstructions = document.getElementById('iosInstructions');
-    const androidInstructions = document.getElementById('androidInstructions');
-    
-    if (modal && iosInstructions && androidInstructions) {
-      iosInstructions.style.display = 'none';
-      androidInstructions.style.display = 'block';
-      modal.classList.remove('hidden');
-      dismissInstallBanner(false);
-    }
-  } else {
-    // Desktop ou outro: mostrar modal genérico
-    const modal = document.getElementById('pwaInstallModal');
-    if (modal) modal.classList.remove('hidden');
-    dismissInstallBanner(false);
-  }
+  const loginBtn = document.getElementById('loginInstallBtn');
+  if (loginBtn) loginBtn.style.display = 'none';
+  const banner = document.getElementById('loginInstallBanner');
+  if (banner) banner.classList.remove('visible');
 }
 
-// Dispensar banner
-function dismissInstallBanner(permanent = false) {
-  const banner = document.getElementById('installBanner');
-  if (banner) {
-    banner.classList.add('hidden');
-  }
-  
-  // Salvar que foi dispensado
-  if (permanent) {
-    try {
-      localStorage.setItem('installBannerDismissed', Date.now().toString());
-    } catch (e) {
-      console.warn('Could not save dismiss state:', e);
-    }
-  }
+function dismissInstallBanner() {
+  try { localStorage.setItem('install_banner_dismissed', 'true'); } catch (e) {}
+  const banner = document.getElementById('loginInstallBanner');
+  if (banner) banner.classList.remove('visible');
 }
 
-// Função antiga para compatibilidade
 function installApp() {
-  triggerInstall();
+  if (isStandalone()) {
+    toast('App già installata!', 'info');
+    return;
+  }
+  if (deferredPrompt) {
+    deferredPrompt.prompt();
+    deferredPrompt.userChoice.then((choiceResult) => {
+      if (choiceResult.outcome === 'accepted') {
+        hideAllInstallUI();
+      }
+      deferredPrompt = null;
+      installPromptReady = false;
+    });
+    return;
+  }
+  const modal = document.getElementById('pwaInstallModal');
+  if (modal) modal.classList.remove('hidden');
 }
 
-// Detectar quando app é instalado
-window.addEventListener('appinstalled', () => {
-  console.log('✅ PWA was installed');
-  dismissInstallBanner(true);
-  toast('App installata con successo!', 'success');
-});
+function initInstallUI() {
+  setTimeout(() => updateInstallUI(), 1500);
+}
 
 function togglePassword() {
   const input = document.getElementById('loginPass');
   const eyeOpen = document.getElementById('eyeOpen');
   const eyeClosed = document.getElementById('eyeClosed');
-  if (input && eyeOpen && eyeClosed) {
-    if (input.type === 'password') {
-      input.type = 'text';
-      eyeOpen.style.display = 'none';
-      eyeClosed.style.display = 'block';
-    } else {
-      input.type = 'password';
-      eyeOpen.style.display = 'block';
-      eyeClosed.style.display = 'none';
-    }
-  }
-}
-
-// Check for saved session
-function checkSavedSession() {
-  try {
-    const session = localStorage.getItem('cotolengo_session');
-    if (session) {
-      const { userId } = JSON.parse(session);
-      // Will auto-login after data loads if valid
-      window.sessionToRestore = userId;
-    }
-  } catch (e) {
-    console.warn('Failed to restore session:', e);
+  if (input.type === 'password') {
+    input.type = 'text';
+    if (eyeOpen) eyeOpen.style.display = 'none';
+    if (eyeClosed) eyeClosed.style.display = 'block';
+  } else {
+    input.type = 'password';
+    if (eyeOpen) eyeOpen.style.display = 'block';
+    if (eyeClosed) eyeClosed.style.display = 'none';
   }
 }
 
@@ -340,23 +258,10 @@ async function showSplash() {
   }
 
   setTimeout(() => {
-    const splash = document.getElementById('splashScreen');
-    const login = document.getElementById('loginScreen');
-    
-    if (splash) splash.classList.remove('active');
-    if (login) login.classList.add('active');
-    
+    document.getElementById('splashScreen').classList.remove('active');
+    document.getElementById('loginScreen').classList.add('active');
     if (!initSuccess) {
       showLoginError('Errore di connessione al server. Verifica la tua connessione internet.');
-    } else if (window.sessionToRestore) {
-      // Try to auto-login with saved session
-      const user = appUsers.find(u => String(u.id) === String(window.sessionToRestore));
-      if (user) {
-        currentUser = user;
-        isAdmin = user.role === 'admin';
-        enterApp();
-      }
-      delete window.sessionToRestore;
     }
   }, 1500);
 }
@@ -420,10 +325,8 @@ async function initializeData() {
 
   // Populate login dropdown
   const loginSelect = document.getElementById('loginUser');
-  if (loginSelect) {
-    loginSelect.innerHTML = '<option value="">Seleziona il tuo nome...</option>' +
-      appUsers.map(u => `<option value="${u.id}">${u.nome}${u.role === 'admin' ? ' (Admin)' : ''}</option>`).join('');
-  }
+  loginSelect.innerHTML = '<option value="">Seleziona il tuo nome...</option>' +
+    appUsers.map(u => `<option value="${u.id}">${u.nome}${u.role === 'admin' ? ' (Admin)' : ''}</option>`).join('');
   console.log('✅ Login dropdown populated with', appUsers.length, 'users');
 }
 
@@ -537,103 +440,76 @@ async function apiDelete(sheetName, keyColumn, keyValue) {
 
 // ── AUTH ──────────────────────────────────────────────────────
 function doLogin() {
-  const userId = document.getElementById('loginUser')?.value;
-  const pass = document.getElementById('loginPass')?.value;
+  const userId = document.getElementById('loginUser').value;
+  const pass = document.getElementById('loginPass').value;
   const errorEl = document.getElementById('loginError');
 
   if (!userId) {
-    if (errorEl) errorEl.textContent = 'Seleziona il tuo nome';
+    errorEl.textContent = 'Seleziona il tuo nome';
     return;
   }
 
   const user = appUsers.find(u => String(u.id) === String(userId));
   if (!user) {
-    if (errorEl) errorEl.textContent = 'Utente non trovato';
+    errorEl.textContent = 'Utente non trovato';
     return;
   }
 
   if (String(user.senha) !== String(pass)) {
-    if (errorEl) errorEl.textContent = 'Password errata';
+    errorEl.textContent = 'Password errata';
     return;
   }
 
-  if (errorEl) errorEl.textContent = '';
+  errorEl.textContent = '';
   currentUser = user;
   isAdmin = user.role === 'admin';
 
   // Save session
-  try {
-    localStorage.setItem('cotolengo_session', JSON.stringify({ userId: user.id }));
-  } catch (e) {
-    console.warn('Failed to save session:', e);
-  }
+  localStorage.setItem('cotolengo_session', JSON.stringify({ userId: user.id }));
 
   enterApp();
 }
 
 function doLogout() {
-  try {
-    localStorage.removeItem('cotolengo_session');
-  } catch (e) {
-    console.warn('Failed to remove session:', e);
-  }
-  
+  localStorage.removeItem('cotolengo_session');
   currentUser = null;
   isAdmin = false;
-  
-  const mainApp = document.getElementById('mainApp');
-  const loginScreen = document.getElementById('loginScreen');
-  const loginPass = document.getElementById('loginPass');
-  
-  if (mainApp) mainApp.classList.remove('active');
-  if (loginScreen) loginScreen.classList.add('active');
-  if (loginPass) loginPass.value = '';
-  
+  document.getElementById('mainApp').classList.remove('active');
+  document.getElementById('loginScreen').classList.add('active');
+  document.getElementById('loginPass').value = '';
   currentPage = 0;
   updateSwipePosition();
 }
 
 function enterApp() {
-  const loginScreen = document.getElementById('loginScreen');
-  const mainApp = document.getElementById('mainApp');
-  
-  if (loginScreen) loginScreen.classList.remove('active');
-  if (mainApp) mainApp.classList.add('active');
+  document.getElementById('loginScreen').classList.remove('active');
+  document.getElementById('mainApp').classList.add('active');
 
   // Set header info
   const initials = currentUser.nome.split(' ').map(w => w[0]).join('').substring(0, 2).toUpperCase();
-  
-  const avatar = document.getElementById('headerAvatar');
-  const name = document.getElementById('headerName');
-  const role = document.getElementById('headerRole');
-  
-  if (avatar) avatar.textContent = initials;
-  if (name) name.textContent = currentUser.nome;
-  if (role) role.textContent = isAdmin ? 'Amministratore' : 'Dipendente';
+  document.getElementById('headerAvatar').textContent = initials;
+  document.getElementById('headerName').textContent = currentUser.nome;
+  document.getElementById('headerRole').textContent = isAdmin ? 'Amministratore' : 'Dipendente';
 
   // Show/hide admin tab
   totalPages = isAdmin ? 3 : 2;
-  
-  const adminNavBtn = document.getElementById('adminNavBtn');
-  const pageAdmin = document.getElementById('pageAdmin');
-  
-  if (adminNavBtn) adminNavBtn.style.display = isAdmin ? 'flex' : 'none';
-  if (pageAdmin) pageAdmin.style.display = isAdmin ? 'block' : 'none';
+  document.getElementById('navAdminBtn').style.display = isAdmin ? 'flex' : 'none';
+  document.getElementById('dotAdmin').style.display = isAdmin ? 'block' : 'none';
+  document.getElementById('pageAdmin').style.display = isAdmin ? 'block' : 'none';
 
   // Build UI
-  populateCalendarFilter();
+  buildLegend();
+  buildCalendarFilter();
   updateMonthDisplay();
   setupSwipe();
   loadAllData();
-  
-  // Mostrar banner de instalação (se aplicável)
-  setTimeout(() => {
-    detectPlatform();
-    showInstallBanner();
-  }, 2000);
 }
 
 // ── CALENDAR FILTER ──────────────────────────────────────────
+function buildCalendarFilter() {
+  // Filtro visível para todos agora
+}
+
 function populateCalendarFilter() {
   const sel = document.getElementById('calNurseFilter');
   if (!sel) return;
@@ -648,11 +524,8 @@ function populateCalendarFilter() {
 }
 
 function onCalFilterChange() {
-  const sel = document.getElementById('calNurseFilter');
-  if (sel) {
-    calNurseFilter = sel.value;
-    renderCalendar();
-  }
+  calNurseFilter = document.getElementById('calNurseFilter').value;
+  renderCalendar();
 }
 
 // ── DATA LOADING ──────────────────────────────────────────────
@@ -770,14 +643,13 @@ async function loadSchedule() {
 
 async function syncData() {
   const btn = document.getElementById('syncBtn');
-  if (btn) btn.classList.add('syncing');
+  btn.classList.add('syncing');
   await loadAllData();
-  if (btn) btn.classList.remove('syncing');
+  btn.classList.remove('syncing');
 }
 
 function showLoading(show) {
-  const overlay = document.getElementById('loadingOverlay');
-  if (overlay) overlay.classList.toggle('hidden', !show);
+  document.getElementById('loadingOverlay').classList.toggle('hidden', !show);
 }
 
 // ── SWIPE NAVIGATION ──────────────────────────────────────────
@@ -790,8 +662,6 @@ let isVerticalScroll = false;
 function setupSwipe() {
   const container = document.getElementById('swipeContainer');
   const track = document.getElementById('swipeTrack');
-  
-  if (!container || !track) return;
 
   container.addEventListener('touchstart', (e) => {
     touchStartX = e.touches[0].clientX;
@@ -851,18 +721,28 @@ function goToPage(page) {
 
 function updateSwipePosition() {
   const track = document.getElementById('swipeTrack');
-  if (track) {
-    track.style.transform = `translateX(-${currentPage * 100}%)`;
-  }
+  track.style.transform = `translateX(-${currentPage * 100}%)`;
 
-  // Update nav buttons
-  const navItems = document.querySelectorAll('.nav-item');
-  navItems.forEach((btn, idx) => {
-    btn.classList.toggle('active', idx === currentPage);
+  // Update nav
+  document.querySelectorAll('.nav-item').forEach(btn => {
+    btn.classList.toggle('active', parseInt(btn.dataset.page) === currentPage);
+  });
+
+  // Update dots
+  document.querySelectorAll('.dot').forEach((dot, i) => {
+    dot.classList.toggle('active', i === currentPage);
   });
 }
 
 // ── CALENDAR (MOBILE CARD GRID) ──────────────────────────────
+function buildLegend() {
+  const codes = ['M1','M2','MF','G','P','PF','N','OFF','FE','AT'];
+  document.getElementById('shiftLegend').innerHTML = codes.map(c => {
+    const s = SHIFTS[c];
+    return `<div class="legend-item"><div class="legend-dot" style="background:${s.color}"></div>${c}</div>`;
+  }).join('');
+}
+
 function changeMonth(dir) {
   currentMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + dir, 1);
   updateMonthDisplay();
@@ -870,10 +750,8 @@ function changeMonth(dir) {
 }
 
 function updateMonthDisplay() {
-  const label = document.getElementById('monthLabel');
-  if (label) {
-    label.textContent = `${MONTH_NAMES[currentMonth.getMonth()]} ${currentMonth.getFullYear()}`;
-  }
+  document.getElementById('monthLabel').textContent =
+    `${MONTH_NAMES[currentMonth.getMonth()]} ${currentMonth.getFullYear()}`;
 }
 
 function getShift(nurseId, day) {
@@ -889,9 +767,6 @@ function daysInMonth(m) {
 let selectedDay = null;
 
 function renderCalendar() {
-  const grid = document.getElementById('calendarGrid');
-  if (!grid) return;
-  
   const days = daysInMonth(currentMonth);
   const m = currentMonth.getMonth();
   const y = currentMonth.getFullYear();
@@ -899,31 +774,37 @@ function renderCalendar() {
   const isCurrentMonth = today.getMonth() === m && today.getFullYear() === y;
   const todayDate = today.getDate();
 
-  // First day of month (0=Sun, convert to Mon=0)
-  const firstDow = new Date(y, m, 1).getDay();
-  const emptyCells = (firstDow + 6) % 7; // Convert Sun=0 to Mon=0 system
+  // Weekday headers
+    const weekdayNames = ['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom'];
+    const weekdaysEl = document.getElementById('calWeekdays');
+    weekdaysEl.innerHTML = weekdayNames.map((name, i) =>
+      `<div class="cal-weekday ${i === 5 || i === 6 ? 'wkend' : ''}">${name}</div>`
+    ).join('');
 
-  // Determine what to show
-  const showingSingle = calNurseFilter !== 'all';
-  const selectedNurse = showingSingle ? nurses.find(n => n.id === calNurseFilter) : null;
+    // First day of month (0=Sun)
+    const firstDow = new Date(y, m, 1).getDay();
+    const emptyCells = (firstDow + 6) % 7;
 
-  // Update subtitle
-  const hasData = Object.keys(schedule).some(k => k.includes(`_${m}_${y}_`));
-  const monthSub = document.getElementById('monthSub');
-  if (monthSub) {
-    if (showingSingle && selectedNurse) {
-      monthSub.textContent = hasData ? `Turni di ${selectedNurse.name}` : 'In attesa di pubblicazione';
-    } else {
-      monthSub.textContent = hasData ? 'Turno Generale' : 'In attesa di pubblicazione';
+    // Build day cells
+    const daysEl = document.getElementById('calDays');
+    let html = '';
+
+    // Empty cells for days before month starts
+    for (let i = 0; i < emptyCells; i++) {
+        html += '<div class="cal-day-cell empty"></div>';
     }
-  }
 
-  let html = '';
+    // Determine what to show
+    const showingSingle = calNurseFilter !== 'all';
+    const selectedNurse = showingSingle ? nurses.find(n => n.id === calNurseFilter) : null;
 
-  // Empty cells for days before month starts
-  for (let i = 0; i < emptyCells; i++) {
-    html += '<div class="cal-day-cell empty"></div>';
-  }
+    // Update subtitle
+    const hasData = Object.keys(schedule).some(k => k.includes(`_${m}_${y}_`));
+    if (showingSingle && selectedNurse) {
+        document.getElementById('monthSub').textContent = hasData ? `Turni di ${selectedNurse.name}` : 'In attesa di pubblicazione';
+    } else {
+        document.getElementById('monthSub').textContent = hasData ? 'Turno Generale' : 'In attesa di pubblicazione';
+    }
 
   // Day cells
   for (let d = 1; d <= days; d++) {
@@ -938,9 +819,7 @@ function renderCalendar() {
       const code = getShift(selectedNurse.id, d);
       if (code !== 'OFF') {
         const sh = SHIFTS[code];
-        if (sh) {
-          shiftHtml = `<div class="cal-day-shift" style="background:${sh.color};color:${sh.text}">${code}</div>`;
-        }
+        shiftHtml = `<div class="cal-day-shift" style="background:${sh.color};color:${sh.text}">${code}</div>`;
       }
     } else if (nurses.length > 0 && hasData) {
       // Show colored dots for all nurses (summary view)
@@ -948,24 +827,36 @@ function renderCalendar() {
         const code = getShift(n.id, d);
         if (code === 'OFF') return '';
         const sh = SHIFTS[code];
-        if (!sh) return '';
         return `<div class="cal-shift-dot" style="background:${sh.color}" title="${n.name}: ${code}"></div>`;
       }).join('');
-      if (dots) {
-        shiftHtml = `<div class="cal-day-dots">${dots}</div>`;
-      }
+      shiftHtml = `<div class="cal-day-dots">${dots}</div>`;
     }
 
-    html += `<div class="cal-day-cell${isWk ? ' wkend' : ''}${isToday ? ' today' : ''}" onclick="showDayDetail(${d})">
+    html += `<div class="cal-day-cell${isWk ? ' wkend' : ''}${isToday ? ' today' : ''}" onclick="toggleDayDetail(${d})">
       <div class="cal-day-num">${d}</div>
       ${shiftHtml}
     </div>`;
   }
 
-  grid.innerHTML = html;
+  daysEl.innerHTML = html;
+
+  // Remove old detail panel if month changed
+  const oldPanel = document.getElementById('calDetailPanel');
+  if (oldPanel) oldPanel.remove();
 }
 
-function showDayDetail(day) {
+function toggleDayDetail(day) {
+  const oldPanel = document.getElementById('calDetailPanel');
+  if (oldPanel) {
+    if (selectedDay === day) {
+      oldPanel.remove();
+      selectedDay = null;
+      return;
+    }
+    oldPanel.remove();
+  }
+  selectedDay = day;
+
   const m = currentMonth.getMonth();
   const y = currentMonth.getFullYear();
   const date = new Date(y, m, day);
@@ -983,68 +874,72 @@ function showDayDetail(day) {
     const code = getShift(nurse.id, day);
     if (code === 'OFF') return '';
     const sh = SHIFTS[code];
-    if (!sh) return '';
-    return `<div class="day-detail-item">
-      <div class="day-detail-shift" style="background:${sh.color};color:${sh.text}">${code}</div>
-      <div class="day-detail-name">${nurse.name}</div>
-      <div class="day-detail-hours">${sh.h}h</div>
+    return `<div class="cal-detail-item">
+      <div class="cal-detail-shift" style="background:${sh.color};color:${sh.text}">${code}</div>
+      <div class="cal-detail-name">${nurse.name}</div>
+      <div class="cal-detail-hours">${sh.h}h</div>
     </div>`;
-  }).filter(Boolean).join('');
+  }).join('');
 
-  if (!listHtml) {
-    listHtml = '<div style="text-align:center;color:var(--text-3);padding:16px;">Nessun turno programmato</div>';
+  if (detailNurses.length === 0) {
+    listHtml = '<div style="text-align:center;color:var(--text-3);padding:16px;">Nessun dipendente selezionato</div>';
   }
 
-  const title = document.getElementById('dayDetailTitle');
-  const body = document.getElementById('dayDetailBody');
-  
-  if (title) title.textContent = `Giorno ${day} — ${dayNames[date.getDay()]}`;
-  if (body) body.innerHTML = `<div class="day-detail-list">${listHtml}</div>`;
-  
-  openModal('dayDetailModal');
+  const panel = document.createElement('div');
+  panel.id = 'calDetailPanel';
+  panel.className = 'cal-day-detail-panel';
+  panel.innerHTML = `
+    <div class="cal-detail-title">
+      <span>📅 Giorno ${day} — ${dayNames[date.getDay()]}</span>
+      <button class="cal-detail-close" onclick="closeDayDetail()">✕</button>
+    </div>
+    <div class="cal-detail-list">${listHtml}</div>
+  `;
+
+  document.getElementById('calMonthGrid').after(panel);
+}
+
+function closeDayDetail() {
+  const panel = document.getElementById('calDetailPanel');
+  if (panel) panel.remove();
+  selectedDay = null;
 }
 
 // ── REQUESTS ──────────────────────────────────────────────────
 function populateFilterNurse() {
-  const sel = document.getElementById('nurseFilter');
-  const wrap = document.getElementById('nurseFilterWrap');
-  
+  const selWrap = document.querySelector('#filterNurse').parentElement;
   if (!isAdmin) {
-    if (wrap) wrap.style.display = 'none';
+    if (selWrap) selWrap.style.display = 'none';
   } else {
-    if (wrap) wrap.style.display = 'block';
-    if (sel) {
-      sel.innerHTML = '<option value="all">👥 Tutti i dipendenti</option>' +
-        nurses.map(n => `<option value="${n.id}">${n.name}</option>`).join('');
-    }
+    if (selWrap) selWrap.style.display = 'block';
   }
+  
+  const sel = document.getElementById('filterNurse');
+  sel.innerHTML = '<option value="all">👤 Tutti i dipendenti</option>' +
+    nurses.map(n => `<option value="${n.id}">${n.name}</option>`).join('');
 }
 
-function filterRequests(status) {
-  statusFilter = status;
-  const pills = document.querySelectorAll('.filter-pills .pill');
-  pills.forEach(pill => pill.classList.remove('active'));
-  event.target.classList.add('active');
+function setStatusFilter(filter, el) {
+  statusFilter = filter;
+  document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
   renderRequests();
 }
 
-function filterByNurse() {
-  const sel = document.getElementById('nurseFilter');
-  if (sel) {
-    nurseFilter = sel.value;
-    renderRequests();
-  }
+function applyFilters() {
+  statusFilter = document.getElementById('filterStatus').value;
+  nurseFilter = document.getElementById('filterNurse').value;
+  renderRequests();
 }
 
 function renderRequests() {
-  const list = document.getElementById('requestsList');
-  if (!list) return;
+  const list = document.getElementById('reqList');
 
   let filtered = [...requests];
   
   // Nurse visibility for non-admins
   if (!isAdmin && currentUser) {
-    filtered = filtered.filter(r => String(r.nurseId) === String(currentUser.nurseId));
+    filtered = filtered.filter(r => String(r.nurseId) === String(currentUser.nurseId) || String(r.fromNurseId) === String(currentUser.nurseId));
   }
 
   // Status filter
@@ -1054,7 +949,7 @@ function renderRequests() {
 
   // Nurse filter (Admin only)
   if (isAdmin && nurseFilter !== 'all') {
-    filtered = filtered.filter(r => String(r.nurseId) === String(nurseFilter));
+    filtered = filtered.filter(r => String(r.nurseId) === String(nurseFilter) || String(r.fromNurseId) === String(nurseFilter));
   }
 
   if (filtered.length === 0) {
@@ -1082,6 +977,7 @@ function renderRequests() {
     FE: 'Ferie',
     OFF: 'Riposo',
     AT: 'Certificato/Licenza',
+    OFF_INJ: 'Assenza Ingiustificata'
   };
 
   const typeIcons = {
@@ -1091,6 +987,7 @@ function renderRequests() {
     FE: '🏖️',
     OFF: '📋',
     AT: '🏥',
+    OFF_INJ: '⚠️'
   };
 
   const statusLabels = { pending: 'In attesa', approved: 'Approvato', rejected: 'Rifiutato' };
@@ -1101,7 +998,7 @@ function renderRequests() {
     const canApprove = isAdmin && isPending;
     const canDelete = isAdmin || (currentUser && currentUser.nurseId === req.nurseId);
 
-    // Date display
+    // Date display (requested dates)
     let dateDisplay = '';
     if (req.startDate) {
       const start = formatDate(req.startDate);
@@ -1190,54 +1087,39 @@ function formatDate(dateStr) {
 // ── NEW REQUEST ───────────────────────────────────────────────
 function openNewRequestModal() {
   // Show nurse field only for admin
-  const nurseField = document.getElementById('reqNurseField');
-  if (nurseField) nurseField.style.display = isAdmin ? 'block' : 'none';
+  document.getElementById('reqNurseField').style.display = isAdmin ? 'block' : 'none';
 
   // Populate nurse selects
   const nurseOptions = nurses.map(n => `<option value="${n.id}">${n.name}</option>`).join('');
 
-  const reqNurse = document.getElementById('reqNurse');
-  const reqSwapNurse = document.getElementById('reqSwapNurse');
-  
-  if (reqNurse) reqNurse.innerHTML = nurseOptions;
-  if (reqSwapNurse) reqSwapNurse.innerHTML = nurseOptions;
+  document.getElementById('reqNurse').innerHTML = nurseOptions;
+  document.getElementById('reqSwapNurse').innerHTML = nurseOptions;
 
   // Reset form
-  const reqType = document.getElementById('reqType');
-  const reqStartDate = document.getElementById('reqStartDate');
-  const reqEndDate = document.getElementById('reqEndDate');
-  const reqDesc = document.getElementById('reqDesc');
-  
-  if (reqType) reqType.value = 'FE';
-  if (reqStartDate) reqStartDate.value = '';
-  if (reqEndDate) reqEndDate.value = '';
-  if (reqDesc) reqDesc.value = '';
-  
+  document.getElementById('reqType').value = 'FE';
+  document.getElementById('reqStartDate').value = '';
+  document.getElementById('reqEndDate').value = '';
+  document.getElementById('reqDesc').value = '';
   onReqTypeChange();
+
   openModal('newReqModal');
 }
 
 function onReqTypeChange() {
-  const type = document.getElementById('reqType')?.value;
-  if (!type) return;
-  
+  const type = document.getElementById('reqType').value;
   const isSwap = type === 'swap';
   const isRange = ['FE', 'AT'].includes(type);
 
-  const endField = document.getElementById('reqEndField');
-  const swapField = document.getElementById('reqSwapField');
-  const dateLabel = document.getElementById('reqDateLabel');
-  
-  if (endField) endField.style.display = isRange ? 'block' : 'none';
-  if (swapField) swapField.style.display = isSwap ? 'block' : 'none';
-  if (dateLabel) dateLabel.textContent = isRange ? 'Data Inizio' : 'Data';
+  document.getElementById('reqEndField').style.display = isRange ? 'block' : 'none';
+  document.getElementById('reqSwapField').style.display = isSwap ? 'block' : 'none';
+  document.getElementById('reqDateLabel').textContent = isRange ? 'Data Inizio' : 'Data';
 }
 
 async function submitNewRequest() {
-  const type = document.getElementById('reqType')?.value;
-  const startDate = document.getElementById('reqStartDate')?.value;
-  const endDate = document.getElementById('reqEndDate')?.value || startDate;
-  const desc = document.getElementById('reqDesc')?.value;
+  const type = document.getElementById('reqType').value;
+  const startDate = document.getElementById('reqStartDate').value;
+  const endDate = document.getElementById('reqEndDate').value || startDate;
+  const desc = document.getElementById('reqDesc').value;
 
   if (!startDate) {
     toast('Compila la data', 'warning');
@@ -1246,8 +1128,7 @@ async function submitNewRequest() {
 
   let nurseId, nurseName;
   if (isAdmin) {
-    const reqNurse = document.getElementById('reqNurse');
-    nurseId = reqNurse?.value;
+    nurseId = document.getElementById('reqNurse').value;
     const nurse = nurses.find(n => n.id === nurseId);
     nurseName = nurse ? nurse.name : '';
   } else {
@@ -1354,22 +1235,16 @@ function updateBadges() {
   const pending = requests.filter(r => r.status === 'pending').length;
 
   const navBadge = document.getElementById('navBadge');
-  const pendingCount = document.getElementById('pendingCount');
-  
-  if (navBadge) {
-    navBadge.style.display = pending > 0 ? 'flex' : 'none';
-    navBadge.textContent = pending;
-  }
+  navBadge.style.display = pending > 0 ? 'flex' : 'none';
+  navBadge.textContent = pending;
 
-  if (pendingCount) {
-    pendingCount.textContent = pending;
-  }
+  const pendingCount = document.getElementById('pendingCount');
+  pendingCount.textContent = pending;
 }
 
 // ── ADMIN: USER MANAGEMENT ───────────────────────────────────
 function renderAdminUsers() {
   const list = document.getElementById('adminUsersList');
-  if (!list) return;
 
   if (appUsers.length === 0) {
     list.innerHTML = '<div class="empty-state"><div class="empty-icon">👥</div><p>Nessun utente registrato</p></div>';
@@ -1398,29 +1273,22 @@ function renderAdminUsers() {
 }
 
 function openAddUserModal() {
-  const newUserName = document.getElementById('newUserName');
-  const newUserPass = document.getElementById('newUserPass');
-  const newUserRole = document.getElementById('newUserRole');
-  const newUserNurse = document.getElementById('newUserNurse');
-  
-  if (newUserName) newUserName.value = '';
-  if (newUserPass) newUserPass.value = '';
-  if (newUserRole) newUserRole.value = 'user';
+  document.getElementById('newUserName').value = '';
+  document.getElementById('newUserPass').value = '';
+  document.getElementById('newUserRole').value = 'user';
 
   // Populate nurse select
-  if (newUserNurse) {
-    newUserNurse.innerHTML = '<option value="">-- Nessuno --</option>' +
-      nurses.map(n => `<option value="${n.id}">${n.name}</option>`).join('');
-  }
+  document.getElementById('newUserNurse').innerHTML = '<option value="">-- Nessuno --</option>' +
+    nurses.map(n => `<option value="${n.id}">${n.name}</option>`).join('');
 
   openModal('addUserModal');
 }
 
 async function submitNewUser() {
-  const nome = document.getElementById('newUserName')?.value.trim();
-  const nurseId = document.getElementById('newUserNurse')?.value;
-  const senha = document.getElementById('newUserPass')?.value;
-  const role = document.getElementById('newUserRole')?.value;
+  const nome = document.getElementById('newUserName').value.trim();
+  const nurseId = document.getElementById('newUserNurse').value;
+  const senha = document.getElementById('newUserPass').value;
+  const role = document.getElementById('newUserRole').value;
 
   if (!nome || !senha) {
     toast('Compila nome e password', 'warning');
@@ -1453,24 +1321,19 @@ function openEditUserModal(userId) {
   const user = appUsers.find(u => String(u.id) === String(userId));
   if (!user) return;
 
-  const editUserId = document.getElementById('editUserId');
-  const editUserName = document.getElementById('editUserName');
-  const editUserPass = document.getElementById('editUserPass');
-  const editUserRole = document.getElementById('editUserRole');
-  
-  if (editUserId) editUserId.value = user.id;
-  if (editUserName) editUserName.value = user.nome;
-  if (editUserPass) editUserPass.value = '';
-  if (editUserRole) editUserRole.value = user.role;
+  document.getElementById('editUserId').value = user.id;
+  document.getElementById('editUserName').value = user.nome;
+  document.getElementById('editUserPass').value = '';
+  document.getElementById('editUserRole').value = user.role;
 
   openModal('editUserModal');
 }
 
 async function submitEditUser() {
-  const id = document.getElementById('editUserId')?.value;
-  const nome = document.getElementById('editUserName')?.value.trim();
-  const senha = document.getElementById('editUserPass')?.value;
-  const role = document.getElementById('editUserRole')?.value;
+  const id = document.getElementById('editUserId').value;
+  const nome = document.getElementById('editUserName').value.trim();
+  const senha = document.getElementById('editUserPass').value;
+  const role = document.getElementById('editUserRole').value;
 
   if (!nome) { toast('Compila il nome', 'warning'); return; }
 
@@ -1497,7 +1360,7 @@ async function submitEditUser() {
 }
 
 async function deleteUser() {
-  const id = document.getElementById('editUserId')?.value;
+  const id = document.getElementById('editUserId').value;
   const user = appUsers.find(u => String(u.id) === String(id));
 
   if (user && user.role === 'admin' && appUsers.filter(u => u.role === 'admin').length <= 1) {
@@ -1523,13 +1386,11 @@ async function deleteUser() {
 
 // ── MODALS ────────────────────────────────────────────────────
 function openModal(id) {
-  const modal = document.getElementById(id);
-  if (modal) modal.classList.remove('hidden');
+  document.getElementById(id).classList.remove('hidden');
 }
 
 function closeModal(id) {
-  const modal = document.getElementById(id);
-  if (modal) modal.classList.add('hidden');
+  document.getElementById(id).classList.add('hidden');
 }
 
 // Close modal on backdrop click
@@ -1545,13 +1406,9 @@ function toast(msg, type = 'success', dur = 3000) {
   const el = document.createElement('div');
   el.className = `toast ${type}`;
   el.innerHTML = `<span class="toast-icon">${icons[type] || '•'}</span><span>${msg}</span>`;
-  
-  const container = document.getElementById('toastContainer');
-  if (container) {
-    container.appendChild(el);
-    setTimeout(() => {
-      el.classList.add('hiding');
-      setTimeout(() => el.remove(), 300);
-    }, dur);
-  }
+  document.getElementById('toastContainer').appendChild(el);
+  setTimeout(() => {
+    el.classList.add('hiding');
+    setTimeout(() => el.remove(), 300);
+  }, dur);
 }

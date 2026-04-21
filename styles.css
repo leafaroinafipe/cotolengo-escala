@@ -1,6 +1,5 @@
 /* ============================================================
-   Cotolengo Escala — Mobile PWA — styles.css v2.0
-   OPTIMIZADO PARA iOS + ANDROID
+   Cotolengo Escala — Mobile PWA — styles.css v1.0
    Design: Glassmorphism Dark Theme com esquema Roxo/Violeta
    ============================================================ */
 
@@ -48,7 +47,7 @@
   --header-h: 64px;
   --nav-h: 72px;
   
-  /* iOS Safe Areas - CRITICAL for iPhone notch support */
+  /* iOS Safe Areas - Suporte completo para iPhone com notch */
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-right: env(safe-area-inset-right, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
@@ -60,7 +59,6 @@
 html {
   height: 100%;
   overflow: hidden;
-  /* iOS optimizations */
   -webkit-text-size-adjust: 100%;
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
@@ -75,13 +73,9 @@ body {
   -webkit-tap-highlight-color: transparent;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  /* Prevent iOS scroll bounce */
+  /* iOS: prevent scroll bounce */
   position: fixed;
   width: 100%;
-  /* iOS Safe area support */
-  padding-top: var(--safe-top);
-  padding-right: var(--safe-right);
-  padding-left: var(--safe-left);
 }
 
 /* ── SCREENS ──────────────────────────────────────── */
@@ -322,9 +316,10 @@ body {
   height: var(--header-h);
   padding: 0 16px;
   /* iOS Safe Area support */
-  padding-top: max(12px, var(--safe-top));
+  padding-top: max(0px, var(--safe-top));
   padding-right: max(16px, var(--safe-right));
   padding-left: max(16px, var(--safe-left));
+  height: calc(var(--header-h) + var(--safe-top));
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -402,7 +397,6 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-around;
-  /* Total height includes safe area */
   height: calc(var(--nav-h) + var(--safe-bottom));
   padding-bottom: var(--safe-bottom);
   background: rgba(13,11,24,0.92);
@@ -1597,172 +1591,6 @@ body {
   padding: 4px;
 }
 
-/* ── NEW PWA INSTALL BANNER ──────────────────────── */
-.install-banner-pwa {
-  position: fixed;
-  bottom: calc(var(--nav-h) + var(--safe-bottom) + 16px);
-  left: 16px;
-  right: 16px;
-  background: linear-gradient(135deg, #7c3aed 0%, #8b5cf6 100%);
-  border-radius: 16px;
-  padding: 16px;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  z-index: 999;
-  box-shadow: 0 12px 40px rgba(139, 92, 246, 0.5), 0 0 0 1px rgba(255,255,255,0.1);
-  animation: slideUpBounce 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-}
-
-.install-banner-pwa.hidden {
-  display: none;
-}
-
-@keyframes slideUpBounce {
-  0% { 
-    transform: translateY(120%);
-    opacity: 0;
-  }
-  60% {
-    transform: translateY(-8px);
-  }
-  100% { 
-    transform: translateY(0);
-    opacity: 1;
-  }
-}
-
-.install-banner-icon {
-  font-size: 32px;
-  flex-shrink: 0;
-  animation: pulse 2s ease-in-out infinite;
-}
-
-@keyframes pulse {
-  0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.1); }
-}
-
-.install-banner-content {
-  flex: 1;
-  min-width: 0;
-}
-
-.install-banner-title {
-  font-size: 15px;
-  font-weight: 800;
-  color: white;
-  margin-bottom: 2px;
-  letter-spacing: -0.3px;
-}
-
-.install-banner-text {
-  font-size: 12px;
-  font-weight: 500;
-  color: rgba(255, 255, 255, 0.85);
-}
-
-.install-banner-btn-primary {
-  padding: 10px 20px;
-  background: white;
-  color: #7c3aed;
-  border: none;
-  border-radius: 12px;
-  font-size: 14px;
-  font-weight: 800;
-  font-family: var(--font);
-  cursor: pointer;
-  flex-shrink: 0;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  transition: all 0.2s;
-}
-
-.install-banner-btn-primary:active {
-  transform: scale(0.95);
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
-}
-
-.install-banner-close {
-  width: 28px;
-  height: 28px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(255, 255, 255, 0.15);
-  border: none;
-  border-radius: 50%;
-  color: white;
-  font-size: 14px;
-  cursor: pointer;
-  flex-shrink: 0;
-  transition: all 0.2s;
-}
-
-.install-banner-close:active {
-  background: rgba(255, 255, 255, 0.25);
-  transform: scale(0.9);
-}
-
-/* ── INSTALL INSTRUCTIONS ────────────────────────── */
-.install-instructions {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.install-step {
-  display: flex;
-  gap: 12px;
-  align-items: flex-start;
-  padding: 12px;
-  background: var(--glass);
-  border: 1px solid var(--glass-border);
-  border-radius: var(--radius-sm);
-  transition: all 0.2s;
-}
-
-.install-step:hover {
-  background: var(--glass-strong);
-  transform: translateX(4px);
-}
-
-.install-step-number {
-  width: 32px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: linear-gradient(135deg, var(--primary), var(--primary-dark));
-  color: white;
-  font-size: 16px;
-  font-weight: 800;
-  border-radius: 50%;
-  flex-shrink: 0;
-  box-shadow: 0 2px 8px rgba(139, 92, 246, 0.3);
-}
-
-.install-step-content {
-  flex: 1;
-}
-
-.install-step-title {
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--text);
-  margin-bottom: 4px;
-  display: flex;
-  align-items: center;
-}
-
-.install-step-desc {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--text-3);
-  line-height: 1.4;
-}
-
 /* ── DATE INPUT FIX (DARK MODE) ──────────────────── */
 input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(1) brightness(0.7); }
 
@@ -1791,4 +1619,255 @@ input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(1) bright
 /* FAB for specific pages */
 #pageRequests .fab {
   bottom: calc(var(--nav-h) + var(--safe-bottom) + 20px);
+}
+
+/* ════════════════════════════════════════════════════════════
+   PWA INSTALL SYSTEM (iOS + Android)
+   ════════════════════════════════════════════════════════════ */
+
+/* ── LOGIN INSTALL BUTTON (top right of login screen) ────── */
+.login-install-btn {
+  position: absolute;
+  top: calc(20px + var(--safe-top));
+  right: calc(16px + var(--safe-right));
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  background: var(--glass);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-full);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 700;
+  font-family: var(--font);
+  cursor: pointer;
+  transition: all 0.2s;
+  -webkit-tap-highlight-color: transparent;
+  animation: fadeInDown 0.5s ease-out;
+}
+.login-install-btn:active {
+  transform: scale(0.95);
+  background: var(--glass-strong);
+}
+.login-install-btn svg {
+  stroke: var(--primary-light);
+}
+
+@keyframes fadeInDown {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ── LOGIN INSTALL BANNER (bottom of login screen) ──────── */
+.login-install-banner {
+  position: fixed;
+  bottom: calc(16px + var(--safe-bottom));
+  left: calc(16px + var(--safe-left));
+  right: calc(16px + var(--safe-right));
+  max-width: 420px;
+  margin: 0 auto;
+  background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+  border-radius: var(--radius-md);
+  padding: 14px 14px 14px 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  z-index: 50;
+  box-shadow: 0 12px 32px rgba(139, 92, 246, 0.4), 0 4px 12px rgba(0,0,0,0.3);
+  opacity: 0;
+  transform: translateY(120%);
+  transition: opacity 0.4s cubic-bezier(0.16, 1, 0.3, 1), transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  pointer-events: none;
+}
+.login-install-banner.visible {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+.login-install-banner .banner-icon {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: var(--radius-sm);
+  color: white;
+  flex-shrink: 0;
+}
+
+.login-install-banner .banner-text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  color: white;
+  min-width: 0;
+}
+.login-install-banner .banner-text strong {
+  font-size: 14px;
+  font-weight: 700;
+}
+.login-install-banner .banner-text span {
+  font-size: 12px;
+  opacity: 0.85;
+  font-weight: 500;
+}
+
+.login-install-banner .banner-btn {
+  padding: 9px 16px;
+  background: white;
+  color: var(--primary-dark);
+  border: none;
+  border-radius: var(--radius-xs);
+  font-size: 13px;
+  font-weight: 800;
+  font-family: var(--font);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 0.15s;
+  -webkit-tap-highlight-color: transparent;
+}
+.login-install-banner .banner-btn:active {
+  transform: scale(0.94);
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.login-install-banner .banner-close {
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 16px;
+  cursor: pointer;
+  padding: 6px;
+  line-height: 1;
+  flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent;
+  transition: color 0.15s;
+}
+.login-install-banner .banner-close:active {
+  color: white;
+}
+
+/* ── PWA INSTALL MODAL (enhanced) ──────────────────── */
+.install-preview {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px;
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  margin-bottom: 16px;
+}
+.install-preview-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+  flex-shrink: 0;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+}
+.install-preview-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.install-preview-text strong {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--text);
+}
+.install-preview-text span {
+  font-size: 13px;
+  color: var(--text-3);
+  font-weight: 500;
+}
+
+.install-benefits {
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.08), rgba(139, 92, 246, 0.03));
+  border: 1px solid rgba(139, 92, 246, 0.15);
+  border-radius: var(--radius-sm);
+  padding: 14px 16px;
+  font-size: 13px;
+  line-height: 1.9;
+  color: var(--text-2);
+  margin-bottom: 20px;
+  font-weight: 500;
+}
+
+.install-platform {
+  margin-bottom: 18px;
+  padding: 14px;
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+}
+
+.install-platform-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+  color: var(--primary-light);
+  font-size: 14px;
+}
+.install-platform-header svg {
+  flex-shrink: 0;
+}
+
+.install-steps {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.install-steps li {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+.install-steps .step-num {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 800;
+  box-shadow: 0 2px 6px rgba(139, 92, 246, 0.3);
+}
+.install-steps .step-text {
+  flex: 1;
+  font-size: 13px;
+  color: var(--text-2);
+  line-height: 1.5;
+  padding-top: 2px;
+}
+.install-steps .step-text strong {
+  color: var(--text);
+  font-weight: 700;
+}
+
+.share-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  background: rgba(139, 92, 246, 0.15);
+  border-radius: 6px;
+  color: var(--primary-light);
+  vertical-align: middle;
+  margin: 0 2px;
 }

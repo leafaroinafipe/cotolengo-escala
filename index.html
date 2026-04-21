@@ -2,24 +2,50 @@
 <html lang="it">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
     <meta name="description" content="Cotolengo Turni — App per i Turni degli Infermieri">
+    
+    <!-- iOS Specific Meta Tags -->
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="theme-color" content="#0a0a1a">
+    <meta name="apple-mobile-web-app-title" content="Cotolengo">
+    <meta name="theme-color" content="#8b5cf6">
+    <meta name="format-detection" content="telephone=no">
+    
     <title>Cotolengo Turni</title>
+    
+    <!-- PWA Manifest -->
     <link rel="manifest" href="manifest.json">
-    <link rel="icon" type="image/png" href="../icon.png">
-    <link rel="apple-touch-icon" href="../icon.png">
+    
+    <!-- Icons (Fixed paths) -->
+    <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+    <link rel="icon" type="image/png" sizes="512x512" href="icon-512.png">
+    <link rel="apple-touch-icon" sizes="192x192" href="icon-192.png">
+    <link rel="apple-touch-icon" sizes="512x512" href="icon-512.png">
+    
+    <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    
+    <!-- Styles -->
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
 
 <!-- ═══════════════════ TOAST CONTAINER ═══════════════════ -->
 <div id="toastContainer" class="toast-container"></div>
+
+<!-- ═══════════════════ INSTALL BANNER (PWA) ═══════════════════ -->
+<div id="installBanner" class="install-banner-pwa hidden">
+    <div class="install-banner-icon">📱</div>
+    <div class="install-banner-content">
+        <div class="install-banner-title">Installa Cotolengo Turni</div>
+        <div class="install-banner-text">Accesso rapido e funziona offline!</div>
+    </div>
+    <button class="install-banner-btn-primary" onclick="triggerInstall()">Installa</button>
+    <button class="install-banner-close" onclick="dismissInstallBanner()" aria-label="Chiudi">✕</button>
+</div>
 
 <!-- ═══════════════════ SPLASH SCREEN ═══════════════════ -->
 <div id="splashScreen" class="screen active">
@@ -75,7 +101,7 @@
                     <label for="loginPass">Password</label>
                     <div class="input-icon-wrap">
                         <span class="input-icon">🔒</span>
-                        <input type="password" id="loginPass" class="login-input" placeholder="Inserisci la password">
+                        <input type="password" id="loginPass" class="login-input" placeholder="Inserisci la password" autocomplete="current-password">
                         <button type="button" class="pw-toggle-btn" id="pwToggleBtn" onclick="togglePassword()" aria-label="Mostra/nascondi password">
                             <svg id="eyeOpen" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                 <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
@@ -95,7 +121,7 @@
                 <p id="loginError" class="login-error"></p>
             </div>
         </div>
-        <p class="login-footer">v1.0 — Sistema di Gestione del Personale</p>
+        <p class="login-footer">v2.0 — Sistema di Gestione del Personale</p>
     </div>
 </div>
 
@@ -119,10 +145,10 @@
             <button class="header-btn" id="installPwaBtn" style="display:none; width:auto; padding: 0 12px; font-size: 11px; font-weight: 700; background: var(--primary); color: white; border: none; border-radius: var(--radius-full);" onclick="installApp()">
                 Installa App
             </button>
-            <button class="header-btn" onclick="syncData()" id="syncBtn" title="Sincronizzare">
+            <button class="header-btn" onclick="syncData()" id="syncBtn" title="Sincronizzare" aria-label="Sincronizza dati">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 2v6h-6M3 12a9 9 0 0 1 15-6.7L21 8M3 22v-6h6M21 12a9 9 0 0 1-15 6.7L3 16"/></svg>
             </button>
-            <button class="header-btn" onclick="doLogout()" title="Esci">
+            <button class="header-btn" onclick="doLogout()" title="Esci" aria-label="Esci dall'app">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>
             </button>
         </div>
@@ -137,14 +163,14 @@
                 <div class="page-content">
                     <!-- Month Navigator -->
                     <div class="month-nav">
-                        <button class="month-btn" onclick="changeMonth(-1)">
+                        <button class="month-btn" onclick="changeMonth(-1)" aria-label="Mese precedente">
                             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M15 18l-6-6 6-6"/></svg>
                         </button>
                         <div class="month-center">
                             <h2 class="month-label" id="monthLabel">Aprile 2026</h2>
                             <span class="month-sub" id="monthSub">Turno Generale</span>
                         </div>
-                        <button class="month-btn" onclick="changeMonth(1)">
+                        <button class="month-btn" onclick="changeMonth(1)" aria-label="Mese successivo">
                             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 18l6-6-6-6"/></svg>
                         </button>
                     </div>
@@ -156,114 +182,120 @@
                         </select>
                     </div>
 
-                    <!-- Calendar Month Grid -->
-                    <div class="cal-month-grid" id="calMonthGrid">
-                        <!-- Dias da semana -->
-                        <div class="cal-weekdays" id="calWeekdays"></div>
-                        <!-- Dias do mês -->
-                        <div class="cal-days" id="calDays"></div>
-                    </div>
+                    <!-- Calendar Grid -->
+                    <div class="calendar-grid" id="calendarGrid"></div>
 
-                    <!-- Shift Legend -->
-                    <div class="shift-legend" id="shiftLegend"></div>
+                    <!-- Summary Section (for users) -->
+                    <div id="mySummary" class="month-summary" style="display:none">
+                        <h3 class="summary-title">📊 Riepilogo del Mese</h3>
+                        <div class="summary-stats">
+                            <div class="stat-card">
+                                <div class="stat-value" id="myHoursTotal">0.0</div>
+                                <div class="stat-label">Ore Totali</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-value" id="myNightsTotal">0</div>
+                                <div class="stat-label">Turni Notte</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-value" id="myDaysOff">0</div>
+                                <div class="stat-label">Giorni Riposo</div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
 
             <!-- ═══ PAGE 2: SOLICITAÇÕES ═══ -->
             <div class="swipe-page" id="pageRequests">
                 <div class="page-content">
-                    <div class="req-sticky-top">
-                        <div class="req-header-section req-header-row">
-                            <div>
-                                <h2 class="page-title">Richieste</h2>
-                                <p class="page-subtitle">Gestisci ferie, riposi e cambi turno</p>
-                            </div>
-                            <button class="header-action-btn" id="fabNewReq" onclick="openNewRequestModal()" title="Nuova richiesta">
-                                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
-                            </button>
-                        </div>
+                    <div class="page-header">
+                        <h2 class="page-title">Richieste</h2>
+                        <div class="page-badge" id="pendingCount">0</div>
+                    </div>
 
-                        <!-- Filters -->
-                        <div class="filter-bar" id="filterBar">
-                            <div class="filter-chip-group filter-chip-compact">
-                                <button class="filter-chip active" data-filter="all" onclick="setStatusFilter('all', this)">Tutti</button>
-                                <button class="filter-chip" data-filter="pending" onclick="setStatusFilter('pending', this)">
-                                    ⏳ <span class="chip-badge" id="pendingCount">0</span>
-                                </button>
-                                <button class="filter-chip" data-filter="approved" onclick="setStatusFilter('approved', this)">✅</button>
-                                <button class="filter-chip" data-filter="rejected" onclick="setStatusFilter('rejected', this)">❌</button>
-                            </div>
-                            <div class="filter-select-wrap">
-                                <select id="filterNurse" class="filter-select" onchange="applyFilters()">
-                                    <option value="all">👤 Tutti i dipendenti</option>
-                                </select>
-                            </div>
-                        </div>
+                    <!-- Filter Pills -->
+                    <div class="filter-pills">
+                        <button class="pill active" onclick="filterRequests('all')">Tutte</button>
+                        <button class="pill" onclick="filterRequests('pending')">Pendenti</button>
+                        <button class="pill" onclick="filterRequests('approved')">Approvate</button>
+                        <button class="pill" onclick="filterRequests('rejected')">Rifiutate</button>
+                    </div>
+
+                    <!-- Nurse Filter (admin only) -->
+                    <div id="nurseFilterWrap" style="display:none; margin-bottom:12px;">
+                        <select id="nurseFilter" class="filter-select" onchange="filterByNurse()">
+                            <option value="all">👥 Tutti i dipendenti</option>
+                        </select>
                     </div>
 
                     <!-- Requests List -->
-                    <div class="req-list" id="reqList">
-                        <div class="empty-state">
-                            <div class="empty-icon">📄</div>
-                            <p>Nessuna richiesta ancora</p>
-                        </div>
-                    </div>
+                    <div id="requestsList" class="requests-list"></div>
                 </div>
+
+                <!-- FAB Button -->
+                <button class="fab" onclick="openNewRequestModal()" aria-label="Nuova richiesta">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                        <path d="M12 5v14M5 12h14"/>
+                    </svg>
+                </button>
             </div>
 
-            <!-- ═══ PAGE 3: GESTÃO DE USUÁRIOS (ADMIN ONLY) ═══ -->
-            <div class="swipe-page" id="pageAdmin">
+            <!-- ═══ PAGE 3: ADMIN (somente admin) ═══ -->
+            <div class="swipe-page" id="pageAdmin" style="display:none">
                 <div class="page-content">
-                    <div class="req-header-section req-header-row">
-                        <div>
-                            <h2 class="page-title">Gestione Accessi</h2>
-                            <p class="page-subtitle">Registra, modifica o rimuovi utenti dall'app</p>
-                        </div>
-                        <button class="header-action-btn" onclick="openAddUserModal()" title="Nuovo utente">
-                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-                                <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
-                                <circle cx="8.5" cy="7" r="4"/>
-                                <line x1="20" y1="8" x2="20" y2="14"/>
-                                <line x1="23" y1="11" x2="17" y2="11"/>
-                            </svg>
-                        </button>
+                    <div class="page-header">
+                        <h2 class="page-title">⚙️ Amministrazione</h2>
                     </div>
 
-                    <!-- Users List -->
-                    <div class="admin-users-list" id="adminUsersList">
-                        <div class="empty-state">
-                            <div class="empty-icon">👥</div>
-                            <p>Caricamento utenti...</p>
+                    <!-- Admin Users Section -->
+                    <div class="admin-section">
+                        <div class="admin-section-header">
+                            <h3 class="admin-section-title">Utenti Registrati</h3>
+                            <button class="admin-add-btn" onclick="openAddUserModal()">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                    <path d="M12 5v14M5 12h14"/>
+                                </svg>
+                            </button>
                         </div>
+                        <div id="adminUsersList" class="admin-users-list"></div>
                     </div>
                 </div>
             </div>
+
         </div>
     </div>
 
-    <!-- ── BOTTOM NAV ── -->
+    <!-- ── BOTTOM NAVIGATION ── -->
     <nav class="bottom-nav" id="bottomNav">
-        <button class="nav-item active" data-page="0" onclick="goToPage(0)">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
-            <span>Turni</span>
+        <button class="nav-item active" onclick="goToPage(0)">
+            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+                <line x1="16" y1="2" x2="16" y2="6"/>
+                <line x1="8" y1="2" x2="8" y2="6"/>
+                <line x1="3" y1="10" x2="21" y2="10"/>
+            </svg>
+            <span class="nav-label">Calendario</span>
         </button>
-        <button class="nav-item" data-page="1" onclick="goToPage(1)">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg>
-            <span>Richieste</span>
-            <span class="nav-badge" id="navBadge" style="display:none">0</span>
+        <button class="nav-item" onclick="goToPage(1)">
+            <div class="nav-badge" id="navBadge" style="display:none">0</div>
+            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+                <line x1="16" y1="13" x2="8" y2="13"/>
+                <line x1="16" y1="17" x2="8" y2="17"/>
+                <polyline points="10 9 9 9 8 9"/>
+            </svg>
+            <span class="nav-label">Richieste</span>
         </button>
-        <button class="nav-item admin-only" data-page="2" onclick="goToPage(2)" id="navAdminBtn" style="display:none">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-            <span>Utenti</span>
+        <button class="nav-item" id="adminNavBtn" style="display:none" onclick="goToPage(2)">
+            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="3"/>
+                <path d="M12 1v6m0 6v6M5.93 5.93l4.24 4.24m5.66 5.66l4.24 4.24M1 12h6m6 0h6M5.93 18.07l4.24-4.24m5.66-5.66l4.24-4.24"/>
+            </svg>
+            <span class="nav-label">Admin</span>
         </button>
     </nav>
-
-    <!-- ── PAGE DOTS ── -->
-    <div class="page-dots" id="pageDots">
-        <span class="dot active"></span>
-        <span class="dot"></span>
-        <span class="dot admin-only" id="dotAdmin" style="display:none"></span>
-    </div>
 </div>
 
 <!-- ═══════════════════ MODAL: NOVA SOLICITAÇÃO ═══════════════════ -->
@@ -271,7 +303,7 @@
     <div class="modal-card">
         <div class="modal-header">
             <h3>Nuova Richiesta</h3>
-            <button class="modal-close" onclick="closeModal('newReqModal')">✕</button>
+            <button class="modal-close" onclick="closeModal('newReqModal')" aria-label="Chiudi">✕</button>
         </div>
         <div class="modal-body">
             <div class="form-field">
@@ -315,7 +347,7 @@
     <div class="modal-card">
         <div class="modal-header">
             <h3>Nuovo Utente</h3>
-            <button class="modal-close" onclick="closeModal('addUserModal')">✕</button>
+            <button class="modal-close" onclick="closeModal('addUserModal')" aria-label="Chiudi">✕</button>
         </div>
         <div class="modal-body">
             <div class="form-field">
@@ -328,7 +360,7 @@
             </div>
             <div class="form-field">
                 <label>Password</label>
-                <input type="text" id="newUserPass" class="form-input" placeholder="Crea una password">
+                <input type="text" id="newUserPass" class="form-input" placeholder="Crea una password" autocomplete="new-password">
             </div>
             <div class="form-field">
                 <label>Livello di Accesso</label>
@@ -349,7 +381,7 @@
     <div class="modal-card">
         <div class="modal-header">
             <h3>Modifica Utente</h3>
-            <button class="modal-close" onclick="closeModal('editUserModal')">✕</button>
+            <button class="modal-close" onclick="closeModal('editUserModal')" aria-label="Chiudi">✕</button>
         </div>
         <div class="modal-body">
             <input type="hidden" id="editUserId">
@@ -359,7 +391,7 @@
             </div>
             <div class="form-field">
                 <label>Nuova Password</label>
-                <input type="text" id="editUserPass" class="form-input" placeholder="Lascia vuoto per mantenere quella attuale">
+                <input type="text" id="editUserPass" class="form-input" placeholder="Lascia vuoto per mantenere quella attuale" autocomplete="new-password">
             </div>
             <div class="form-field">
                 <label>Livello di Accesso</label>
@@ -381,7 +413,7 @@
     <div class="modal-card modal-compact">
         <div class="modal-header">
             <h3 id="dayDetailTitle">Dia 15 — Segunda</h3>
-            <button class="modal-close" onclick="closeModal('dayDetailModal')">✕</button>
+            <button class="modal-close" onclick="closeModal('dayDetailModal')" aria-label="Chiudi">✕</button>
         </div>
         <div class="modal-body" id="dayDetailBody">
         </div>
@@ -392,19 +424,75 @@
 <div id="pwaInstallModal" class="modal-backdrop hidden">
     <div class="modal-card">
         <div class="modal-header">
-            <h3>Installa l'App</h3>
-            <button class="modal-close" onclick="closeModal('pwaInstallModal')">✕</button>
+            <h3>📱 Installa l'App</h3>
+            <button class="modal-close" onclick="closeModal('pwaInstallModal')" aria-label="Chiudi">✕</button>
         </div>
         <div class="modal-body">
-            <div style="text-align: center; margin-bottom: 16px;">
-                <img src="../icon.png" style="width: 64px; height: 64px; border-radius: 12px; margin-bottom: 8px;">
-                <p style="color: var(--text-2); font-size: 14px;">Aggiungi <b>Cotolengo Turni</b> alla schermata Home per un accesso rapido e offline.</p>
+            <div style="text-align: center; margin-bottom: 20px;">
+                <img src="icon-192.png" alt="Cotolengo Turni" style="width: 80px; height: 80px; border-radius: 16px; margin-bottom: 12px; box-shadow: 0 4px 16px rgba(139,92,246,0.3);">
+                <p style="color: var(--text-2); font-size: 15px; line-height: 1.5;"><b>Cotolengo Turni</b><br>Funziona offline e appare sulla tua schermata Home!</p>
             </div>
-            <div style="background: var(--glass); padding: 12px; border-radius: 8px; font-size: 13px; color: var(--text-3); text-align: left; line-height: 1.5;">
-                <b>Su iOS (Safari):</b><br>1. Tocca l'icona Condividi <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: middle"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8M16 6l-4-4-4 4M12 2v13"/></svg> in basso.<br>2. Scorri e seleziona "Aggiungi a Home".<br><br>
-                <b>Su Android (Chrome):</b><br>1. Tocca l'icona del menu (⋮) in alto a destra.<br>2. Seleziona "Aggiungi a schermata Home" o "Installa app".
+
+            <!-- iOS Instructions -->
+            <div id="iosInstructions" class="install-instructions" style="display:none">
+                <div class="install-step">
+                    <div class="install-step-number">1</div>
+                    <div class="install-step-content">
+                        <div class="install-step-title">Apri in Safari</div>
+                        <div class="install-step-desc">Assicurati di usare Safari (non Chrome o altri browser)</div>
+                    </div>
+                </div>
+                <div class="install-step">
+                    <div class="install-step-number">2</div>
+                    <div class="install-step-content">
+                        <div class="install-step-title">Tocca "Condividi" 
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: middle; margin-left: 4px;"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8M16 6l-4-4-4 4M12 2v13"/></svg>
+                        </div>
+                        <div class="install-step-desc">Cerca l'icona in basso al centro dello schermo</div>
+                    </div>
+                </div>
+                <div class="install-step">
+                    <div class="install-step-number">3</div>
+                    <div class="install-step-content">
+                        <div class="install-step-title">Seleziona "Aggiungi a Home"</div>
+                        <div class="install-step-desc">Scorri in basso nel menu e tocca questa opzione</div>
+                    </div>
+                </div>
+                <div class="install-step">
+                    <div class="install-step-number">4</div>
+                    <div class="install-step-content">
+                        <div class="install-step-title">Conferma</div>
+                        <div class="install-step-desc">L'app apparirà sulla tua schermata Home! 🎉</div>
+                    </div>
+                </div>
             </div>
-            <button class="form-submit" style="margin-top: 16px;" onclick="closeModal('pwaInstallModal')">Ho capito</button>
+
+            <!-- Android Instructions -->
+            <div id="androidInstructions" class="install-instructions" style="display:none">
+                <div class="install-step">
+                    <div class="install-step-number">1</div>
+                    <div class="install-step-content">
+                        <div class="install-step-title">Tocca il menu (⋮)</div>
+                        <div class="install-step-desc">In alto a destra dello schermo</div>
+                    </div>
+                </div>
+                <div class="install-step">
+                    <div class="install-step-number">2</div>
+                    <div class="install-step-content">
+                        <div class="install-step-title">Seleziona "Installa app"</div>
+                        <div class="install-step-desc">O "Aggiungi a schermata Home"</div>
+                    </div>
+                </div>
+                <div class="install-step">
+                    <div class="install-step-number">3</div>
+                    <div class="install-step-content">
+                        <div class="install-step-title">Conferma</div>
+                        <div class="install-step-desc">L'app sarà installata! 🎉</div>
+                    </div>
+                </div>
+            </div>
+
+            <button class="form-submit" style="margin-top: 20px;" onclick="closeModal('pwaInstallModal')">Ho capito</button>
         </div>
     </div>
 </div>

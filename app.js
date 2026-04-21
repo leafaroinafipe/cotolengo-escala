@@ -1,5 +1,5 @@
 // ============================================================
-//  Cotolengo Escala — Mobile PWA — app.js v2.0
+//  Cottolengo Escala — Mobile PWA — app.js v2.0
 //  OPTIMIZADO PARA iOS + ANDROID
 //  Lógica completa: Auth, Swipe, Calendário, Solicitações, Admin
 // ============================================================
@@ -43,6 +43,39 @@ function generateId() {
   const random = Math.random().toString(36).substring(2, 11);
   const random2 = Math.random().toString(36).substring(2, 11);
   return `${timestamp}-${random}-${random2}`;
+}
+
+// ── CACHE: localStorage com TTL por tipo (stale-while-revalidate) ─
+const CACHE_PREFIX = 'cottolengo_cache_';
+const CACHE_TTL = {
+  Funcionarios:  60 * 60 * 1000,     // 1 hora — quase estático
+  Escala:        10 * 60 * 1000,     // 10 min — muda quando admin publica
+  Solicitacoes:  30 * 1000,          // 30 seg — alta frequência
+  Usuarios:      10 * 60 * 1000      // 10 min
+};
+
+function cacheKey(name) { return CACHE_PREFIX + name; }
+
+function cacheGet(name) {
+  try {
+    const raw = localStorage.getItem(cacheKey(name));
+    if (!raw) return null;
+    const obj = JSON.parse(raw);
+    if (!obj || typeof obj.t !== 'number') return null;
+    const ttl = CACHE_TTL[name] || 60 * 1000;
+    const age = Date.now() - obj.t;
+    return { data: obj.d, stale: age > ttl, age };
+  } catch (e) { return null; }
+}
+
+function cacheSet(name, data) {
+  try {
+    localStorage.setItem(cacheKey(name), JSON.stringify({ t: Date.now(), d: data }));
+  } catch (e) { console.warn('Cache set failed:', e.message); }
+}
+
+function cacheInvalidate(name) {
+  try { localStorage.removeItem(cacheKey(name)); } catch (e) {}
 }
 
 const SHIFTS = {
@@ -290,13 +323,39 @@ async function initializeData() {
   console.log('🔄 initializeData: Starting...');
   console.log('🔗 API URL:', GOOGLE_API_URL);
 
-  // Load users for login dropdown
+  // ── Fase 1: Hidratar do cache imediatamente (login instantâneo) ──
+  const cached = cacheGet('Usuarios');
+  if (cached && cached.data && cached.data.length > 0) {
+    appUsers = cached.data;
+    populateLoginDropdown();
+    console.log('📦 Usuarios do cache:', appUsers.length, 'users (age:', Math.round(cached.age / 1000), 's, stale:', cached.stale, ')');
+  }
+
+  // Se o cache está fresco, atualiza em background (não bloqueia tela)
+  if (cached && !cached.stale && appUsers.length > 0) {
+    apiRead('Usuarios').then(fresh => {
+      if (fresh && fresh.length > 0) {
+        appUsers = fresh;
+        cacheSet('Usuarios', fresh);
+        populateLoginDropdown();
+      }
+    }).catch(e => console.warn('Background refresh Usuarios failed:', e.message));
+    return;
+  }
+
+  // ── Fase 2: Sem cache ou cache velho — busca da rede ──
   let usersResult;
   try {
     usersResult = await apiRead('Usuarios');
     console.log('✅ Users loaded:', usersResult.length, 'users');
+    cacheSet('Usuarios', usersResult);
   } catch (e) {
     console.error('❌ Failed to load users:', e.message);
+    // Se já hidratamos do cache (mesmo stale), seguimos em frente
+    if (appUsers.length > 0) {
+      console.warn('⚠️ Usando cache stale para não bloquear login');
+      return;
+    }
     throw new Error('Impossibile caricare gli utenti: ' + e.message);
   }
 
@@ -321,10 +380,15 @@ async function initializeData() {
       // Still use the admin locally so user can at least see the login screen
     }
     appUsers = [adminUser];
+    cacheSet('Usuarios', appUsers);
   }
 
-  // Populate login dropdown
+  populateLoginDropdown();
+}
+
+function populateLoginDropdown() {
   const loginSelect = document.getElementById('loginUser');
+  if (!loginSelect) return;
   loginSelect.innerHTML = '<option value="">Seleziona il tuo nome...</option>' +
     appUsers.map(u => `<option value="${u.id}">${u.nome}${u.role === 'admin' ? ' (Admin)' : ''}</option>`).join('');
   console.log('✅ Login dropdown populated with', appUsers.length, 'users');
@@ -529,106 +593,158 @@ function onCalFilterChange() {
 }
 
 // ── DATA LOADING ──────────────────────────────────────────────
+// Estratégia: Hidratar do cache (instantâneo) → Fetch em paralelo → Re-render
 async function loadAllData() {
   showLoading(true);
+
+  // ── FASE 1: Cache (render imediato, sem rede) ──
+  const cacheHasData = hydrateFromCache();
+  if (cacheHasData) {
+    renderAll();
+    console.log('⚡ Render inicial do cache (sem rede)');
+  }
+
+  // ── FASE 2: Fetch em paralelo ──
+  const t0 = Date.now();
+  const fetches = [
+    apiRead('Funcionarios').catch(e => { console.error('❌ Funcionarios:', e.message); return { __err: e }; }),
+    apiRead('Escala').catch(e => { console.error('❌ Escala:', e.message); return { __err: e }; }),
+    apiRead('Solicitacoes').catch(e => { console.error('❌ Solicitacoes:', e.message); return { __err: e }; })
+  ];
+  if (isAdmin) {
+    fetches.push(apiRead('Usuarios').catch(e => { console.error('❌ Usuarios:', e.message); return { __err: e }; }));
+  }
+
+  const results = await Promise.all(fetches);
+  const [nursesData, escalaData, reqData, usersData] = results;
+  console.log(`⏱️ Parallel fetch completado em ${Date.now() - t0}ms`);
+
   let hasErrors = false;
 
-  try {
-    // Load nurses (normaliza colunas do Sheet)
-    try {
-      const nursesData = await apiRead('Funcionarios');
-      console.log('📋 Raw Funcionarios:', nursesData);
-      if (nursesData && nursesData.length > 0) {
-        nurses = normalizeNurses(nursesData);
-        console.log('📋 Normalized nurses:', nurses);
-      } else {
-        console.warn('⚠️ Nenhum funcionário encontrado na aba Funcionarios do Google Sheets.');
-      }
-    } catch (e) {
-      console.error('❌ Failed to load Funcionarios:', e.message);
-      hasErrors = true;
-    }
-
-    // Auto-match user by name if needed
-    if (!isAdmin && currentUser && (!currentUser.nurseId || currentUser.nurseId === '')) {
-      const userName = currentUser.nome.toLowerCase().trim();
-      const match = nurses.find(n => {
-        const nn = n.name.toLowerCase().trim();
-        return nn === userName || nn.includes(userName) || userName.includes(nn);
-      });
-      if (match) {
-        currentUser.nurseId = match.id;
-        calNurseFilter = match.id;
-        apiUpdate('Usuarios', 'id', currentUser.id, { nurseId: match.id }).catch(() => {});
-      }
-    }
-
-    // Load schedule
-    try {
-      await loadSchedule();
-      console.log('📅 Schedule entries:', Object.keys(schedule).length);
-    } catch (e) {
-      console.error('❌ Failed to load Escala:', e.message);
-      hasErrors = true;
-    }
-
-    // Load requests
-    try {
-      const reqData = await apiRead('Solicitacoes');
-      console.log('📝 Solicitações carregadas:', reqData);
-      if (reqData) {
-        requests = reqData;
-      }
-    } catch (e) {
-      console.error('❌ Failed to load Solicitacoes:', e.message);
-      hasErrors = true;
-    }
-
-    // Load users if admin
-    if (isAdmin) {
-      try {
-        const usrData = await apiRead('Usuarios');
-        if (usrData) appUsers = usrData;
-      } catch (e) {
-        console.error('❌ Failed to reload Usuarios:', e.message);
-        hasErrors = true;
-      }
-    }
-
-    // Render (always render with whatever data we have)
-    renderCalendar();
-    renderRequests();
-    populateFilterNurse();
-    populateCalendarFilter();
-    if (isAdmin) renderAdminUsers();
-    updateBadges();
-
-    if (hasErrors) {
-      toast('Alcuni dati non sono stati caricati', 'warning');
+  // Funcionarios
+  if (nursesData && !nursesData.__err) {
+    if (Array.isArray(nursesData) && nursesData.length > 0) {
+      nurses = normalizeNurses(nursesData);
+      cacheSet('Funcionarios', nursesData);
+      console.log('📋 Funcionarios atualizados:', nurses.length);
     } else {
-      toast('Dati sincronizzati', 'success');
+      console.warn('⚠️ Nenhum funcionário na aba Funcionarios.');
     }
-  } catch (e) {
-    console.error('❌ Critical load error:', e);
-    toast('Errore critico nel caricamento', 'error');
+  } else if (nursesData && nursesData.__err) {
+    hasErrors = true;
+  }
+
+  // Escala
+  if (escalaData && !escalaData.__err) {
+    if (Array.isArray(escalaData)) {
+      cacheSet('Escala', escalaData);
+      parseSchedule(escalaData);
+    }
+  } else if (escalaData && escalaData.__err) {
+    hasErrors = true;
+  }
+
+  // Solicitacoes
+  if (reqData && !reqData.__err) {
+    if (Array.isArray(reqData)) {
+      requests = reqData;
+      cacheSet('Solicitacoes', reqData);
+    }
+  } else if (reqData && reqData.__err) {
+    hasErrors = true;
+  }
+
+  // Usuarios (admin)
+  if (isAdmin && usersData && !usersData.__err) {
+    if (Array.isArray(usersData)) {
+      appUsers = usersData;
+      cacheSet('Usuarios', usersData);
+    }
+  } else if (isAdmin && usersData && usersData.__err) {
+    hasErrors = true;
+  }
+
+  // Auto-match user by name if needed (depois de ter Funcionarios)
+  if (!isAdmin && currentUser && (!currentUser.nurseId || currentUser.nurseId === '')) {
+    const userName = currentUser.nome.toLowerCase().trim();
+    const match = nurses.find(n => {
+      const nn = n.name.toLowerCase().trim();
+      return nn === userName || nn.includes(userName) || userName.includes(nn);
+    });
+    if (match) {
+      currentUser.nurseId = match.id;
+      calNurseFilter = match.id;
+      apiUpdate('Usuarios', 'id', currentUser.id, { nurseId: match.id })
+        .then(() => cacheInvalidate('Usuarios'))
+        .catch(() => {});
+    }
+  }
+
+  // Re-render com dados frescos
+  renderAll();
+
+  if (hasErrors) {
+    toast('Alcuni dati non sono stati caricati', 'warning');
+  } else {
+    toast('Dati sincronizzati', 'success');
   }
 
   showLoading(false);
 }
 
-async function loadSchedule() {
-  const data = await apiRead('Escala');
-  console.log('📅 Escala raw data:', data);
-  if (!data || data.length === 0) return;
+// Hidrata estado a partir do cache (sem rede). Retorna true se havia dados.
+function hydrateFromCache() {
+  let hasData = false;
 
+  const fCache = cacheGet('Funcionarios');
+  if (fCache && Array.isArray(fCache.data) && fCache.data.length > 0) {
+    nurses = normalizeNurses(fCache.data);
+    hasData = true;
+    console.log('📦 Funcionarios do cache:', nurses.length);
+  }
+
+  const eCache = cacheGet('Escala');
+  if (eCache && Array.isArray(eCache.data)) {
+    parseSchedule(eCache.data);
+    hasData = true;
+    console.log('📦 Escala do cache:', Object.keys(schedule).length, 'entries');
+  }
+
+  const rCache = cacheGet('Solicitacoes');
+  if (rCache && Array.isArray(rCache.data)) {
+    requests = rCache.data;
+    hasData = true;
+    console.log('📦 Solicitacoes do cache:', requests.length);
+  }
+
+  if (isAdmin) {
+    const uCache = cacheGet('Usuarios');
+    if (uCache && Array.isArray(uCache.data)) {
+      appUsers = uCache.data;
+    }
+  }
+
+  return hasData;
+}
+
+function renderAll() {
+  renderCalendar();
+  renderRequests();
+  populateFilterNurse();
+  populateCalendarFilter();
+  if (isAdmin) renderAdminUsers();
+  updateBadges();
+}
+
+// Parseia linhas brutas de Escala para o dicionário `schedule` do mês atual
+function parseSchedule(data) {
   schedule = {};
+  if (!data || data.length === 0) return;
   const m = currentMonth.getMonth();
   const y = currentMonth.getFullYear();
 
   data.forEach(row => {
-    const rowMonth = parseInt(row.month);
-    const rowYear = parseInt(row.year);
-    // row.month comes from Sheets (1 to 12). m is 0 to 11.
+    // row.month vem do Sheets (1 a 12). m é 0 a 11.
     if (String(row.month) === String(m + 1) && String(row.year) === String(y)) {
       for (let d = 1; d <= 31; d++) {
         const val = row['d' + d];
@@ -639,6 +755,26 @@ async function loadSchedule() {
     }
   });
   console.log('📅 Schedule parsed for', MONTH_NAMES[m], y, ':', Object.keys(schedule).length, 'entries');
+}
+
+// Usada pelo changeMonth: tenta cache primeiro, senão busca e atualiza
+async function loadSchedule() {
+  const cached = cacheGet('Escala');
+  if (cached && Array.isArray(cached.data)) {
+    parseSchedule(cached.data);
+    // Se o cache está fresco, evita a chamada de rede
+    if (!cached.stale) return;
+  }
+  try {
+    const data = await apiRead('Escala');
+    console.log('📅 Escala raw data:', data);
+    if (Array.isArray(data)) {
+      cacheSet('Escala', data);
+      parseSchedule(data);
+    }
+  } catch (e) {
+    console.warn('⚠️ loadSchedule fallback no cache:', e.message);
+  }
 }
 
 async function syncData() {
@@ -1154,6 +1290,7 @@ async function submitNewRequest() {
   try {
     await apiWrite('Solicitacoes', req);
     requests.push(req);
+    cacheSet('Solicitacoes', requests);
     renderRequests();
     updateBadges();
     closeModal('newReqModal');
@@ -1180,6 +1317,7 @@ async function approveRequest(id) {
       req.approvedAt = new Date().toISOString();
       req.approvedBy = currentUser.nome;
     }
+    cacheSet('Solicitacoes', requests);
     renderRequests();
     updateBadges();
     toast('Richiesta approvata!', 'success');
@@ -1204,6 +1342,7 @@ async function rejectRequest(id) {
       req.approvedAt = new Date().toISOString();
       req.approvedBy = currentUser.nome;
     }
+    cacheSet('Solicitacoes', requests);
     renderRequests();
     updateBadges();
     toast('Richiesta rifiutata', 'warning');
@@ -1220,6 +1359,7 @@ async function deleteRequest(id) {
   try {
     await apiDelete('Solicitacoes', 'id', id);
     requests = requests.filter(r => String(r.id) !== String(id));
+    cacheSet('Solicitacoes', requests);
     renderRequests();
     updateBadges();
     toast('Richiesta eliminata', 'info');
@@ -1307,6 +1447,7 @@ async function submitNewUser() {
   try {
     await apiWrite('Usuarios', newUser);
     appUsers.push(newUser);
+    cacheSet('Usuarios', appUsers);
     renderAdminUsers();
     closeModal('addUserModal');
     toast(`${nome} registrato!`, 'success');
@@ -1349,6 +1490,7 @@ async function submitEditUser() {
       user.role = role;
       if (senha) user.senha = senha;
     }
+    cacheSet('Usuarios', appUsers);
     renderAdminUsers();
     closeModal('editUserModal');
     toast('Utente aggiornato!', 'success');
@@ -1374,6 +1516,7 @@ async function deleteUser() {
   try {
     await apiDelete('Usuarios', 'id', id);
     appUsers = appUsers.filter(u => String(u.id) !== String(id));
+    cacheSet('Usuarios', appUsers);
     renderAdminUsers();
     closeModal('editUserModal');
     toast('Utente eliminato', 'info');

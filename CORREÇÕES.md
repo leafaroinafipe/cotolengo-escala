@@ -1,5 +1,5 @@
 # RELATÓRIO COMPLETO: Correções e Otimizações iOS
-## Cotolengo Turni PWA v2.0
+## Cottolengo Turni PWA v2.0
 
 ---
 
@@ -176,7 +176,7 @@ body {
 ```html
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Cotolengo">
+<meta name="apple-mobile-web-app-title" content="Cottolengo">
 <meta name="format-detection" content="telephone=no">
 ```
 

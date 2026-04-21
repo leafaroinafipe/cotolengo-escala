@@ -1,7 +1,7 @@
 {
-  "name": "Cotolengo Turni",
+  "name": "Cottolengo Turni",
   "short_name": "Turni",
-  "description": "App per la gestione dei turni del personale — Cotolengo",
+  "description": "App per la gestione dei turni del personale — Cottolengo",
   "lang": "it",
   "start_url": "./index.html",
   "display": "standalone",

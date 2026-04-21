@@ -1,5 +1,5 @@
 // ============================================================
-//  Google Apps Script — Cotolengo Escala v2.0
+//  Google Apps Script — Cottolengo Escala v2.0
 //  ATUALIZADO: Suporte a update, delete e bulkWrite
 //  
 //  INSTRUÇÕES: Copie TUDO abaixo e cole no editor do

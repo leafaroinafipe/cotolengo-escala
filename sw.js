@@ -1,10 +1,10 @@
 // ============================================================
-//  Cotolengo Turni — Service Worker v3.0
+//  Cottolengo Turni — Service Worker v3.0
 //  Cache offline para o PWA — API calls bypass SW completely
 // ============================================================
 
-const CACHE_VERSION = '7';
-const CACHE_NAME = `cotolengo-escala-${CACHE_VERSION}`;
+const CACHE_VERSION = '8';
+const CACHE_NAME = `cottolengo-escala-${CACHE_VERSION}`;
 const ASSETS = [
   './',
   './index.html',

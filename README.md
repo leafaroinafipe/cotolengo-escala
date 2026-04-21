@@ -1,4 +1,4 @@
-# Cotolengo Turni v2.0
+# Cottolengo Turni v2.0
 ## App PWA para Gestão de Turnos - OTIMIZADO PARA iOS + ANDROID
 
 ---
@@ -20,7 +20,7 @@
 - ✅ Header e Navigation adaptam-se automaticamente ao notch
 - ✅ Prevenção de zoom acidental (`user-scalable=no`)
 - ✅ Meta tag `format-detection` para evitar auto-linking de telefones
-- ✅ Título específico para home screen: "Cotolengo"
+- ✅ Título específico para home screen: "Cottolengo"
 
 ---
 
@@ -77,7 +77,7 @@
    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
    <meta name="apple-mobile-web-app-capable" content="yes">
    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-   <meta name="apple-mobile-web-app-title" content="Cotolengo">
+   <meta name="apple-mobile-web-app-title" content="Cottolengo">
    <meta name="format-detection" content="telephone=no">
    ```
 
@@ -297,14 +297,14 @@ Para problemas ou dúvidas:
 
 ## 📜 LICENÇA
 
-Código livre para uso interno da instituição Cotolengo.
+Código livre para uso interno da instituição Cottolengo.
 
 ---
 
 ## 👥 CRÉDITOS
 
 **Versão 2.0** - Otimização completa para iOS + Android
-**Desenvolvido para:** Cotolengo - Sistema de Gestão de Turnos
+**Desenvolvido para:** Cottolengo - Sistema de Gestão de Turnos
 
 ---
 

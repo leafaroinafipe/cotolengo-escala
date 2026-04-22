@@ -82,7 +82,7 @@ const SHIFTS = {
   'M1': { name:'Mattina 1',     h:7.0,  color:'#f59e0b', text:'#1a1a00', period:'morning' },
   'M2': { name:'Mattina 2',     h:4.5,  color:'#fcd34d', text:'#1a1a00', period:'morning' },
   'MF': { name:'Mattina Festivo',h:7.5, color:'#f97316', text:'#fff',    period:'morning' },
-  'G':  { name:'Giornata',     h:9.5,  color:'#0ea5e9', text:'#fff',    period:'morning' },
+  'G':  { name:'Giornata',     h:8,    color:'#0ea5e9', text:'#fff',    period:'morning' },
   'P':  { name:'Pomeriggio',       h:8.5,  color:'#8b5cf6', text:'#fff',    period:'afternoon' },
   'PF': { name:'Pomeriggio Festivo',h:10,  color:'#a78bfa', text:'#fff',    period:'afternoon' },
   'N':  { name:'Notte',       h:9,    color:'#1e1b4b', text:'#fff',    period:'night'   },

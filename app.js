@@ -83,8 +83,8 @@ const SHIFTS = {
   'M2': { name:'Mattina 2',     h:4.5,  color:'#fcd34d', text:'#1a1a00', period:'morning' },
   'MF': { name:'Mattina Festivo',h:7.5, color:'#f97316', text:'#fff',    period:'morning' },
   'G':  { name:'Giornata',     h:8,    color:'#0ea5e9', text:'#fff',    period:'morning' },
-  'P':  { name:'Pomeriggio',       h:8.5,  color:'#8b5cf6', text:'#fff',    period:'afternoon' },
-  'PF': { name:'Pomeriggio Festivo',h:10,  color:'#a78bfa', text:'#fff',    period:'afternoon' },
+  'P':  { name:'Pomeriggio',       h:8,    color:'#8b5cf6', text:'#fff',    period:'afternoon' },
+  'PF': { name:'Pomeriggio Festivo',h:7.5, color:'#a78bfa', text:'#fff',    period:'afternoon' },
   'N':  { name:'Notte',       h:9,    color:'#1e1b4b', text:'#fff',    period:'night'   },
   'OFF':{ name: 'Riposo', h: 0, color: 'rgba(255,255,255,0.03)', text: 'rgba(255,255,255,0.2)', period:'off' },
   'FE': { name: 'Ferie', h: 0, color: '#10b981', text: '#fff', period:'off' },
@@ -398,7 +398,7 @@ async function ensureSheetSetup() {
   // Ensure the required sheets exist — NÃO toca em Funcionarios (já existe com seus próprios headers)
   try {
     await apiCall('setupHeaders', 'Usuarios', { headers: ['id', 'nome', 'senha', 'role', 'nurseId'] });
-    await apiCall('setupHeaders', 'Solicitacoes', { headers: ['id', 'type', 'status', 'nurseId', 'nurseName', 'startDate', 'endDate', 'desc', 'createdAt', 'approvedAt', 'approvedBy'] });
+    await apiCall('setupHeaders', 'Solicitacoes', { headers: ['id', 'type', 'status', 'nurseId', 'nurseName', 'startDate', 'endDate', 'desc', 'swapNurseId', 'swapNurseName', 'createdAt', 'approvedAt', 'approvedBy'] });
     await apiCall('setupHeaders', 'Escala', { headers: ['nurseId', 'month', 'year', 'd1','d2','d3','d4','d5','d6','d7','d8','d9','d10','d11','d12','d13','d14','d15','d16','d17','d18','d19','d20','d21','d22','d23','d24','d25','d26','d27','d28','d29','d30','d31'] });
   } catch (e) {
     console.warn('Sheet setup:', e);
@@ -1158,6 +1158,13 @@ function renderRequests() {
     const initials = personName.split(' ').map(w => w[0]).join('').substring(0, 2).toUpperCase();
 
     // Build card sections
+    // Swap partner info
+    const swapHtml = (req.type === 'swap' && req.swapNurseName) ? `
+      <div class="req-card-swap">
+        <span class="swap-icon">🔄</span>
+        <span class="swap-text">Cambio con <strong>${req.swapNurseName}</strong></span>
+      </div>` : '';
+
     const descHtml = req.desc ? `
       <div class="req-card-desc">
         <span class="desc-icon">💬</span>
@@ -1200,6 +1207,7 @@ function renderRequests() {
           <div class="req-person-avatar">${initials}</div>
           <div class="req-person-name">${personName}</div>
         </div>
+        ${swapHtml}
         ${descHtml}
         <div class="req-card-meta">
           ${dateDisplay ? `<div class="req-meta-chip"><span class="meta-icon">📅</span> <strong>${dateDisplay}</strong></div>` : ''}
@@ -1249,6 +1257,55 @@ function onReqTypeChange() {
   document.getElementById('reqEndField').style.display = isRange ? 'block' : 'none';
   document.getElementById('reqSwapField').style.display = isSwap ? 'block' : 'none';
   document.getElementById('reqDateLabel').textContent = isRange ? 'Data Inizio' : 'Data';
+
+  // Atualiza dropdown de enfermeiras de swap quando muda tipo
+  if (isSwap) updateSwapNurseOptions();
+}
+
+function onReqDateChange() {
+  const type = document.getElementById('reqType').value;
+  if (type === 'swap') updateSwapNurseOptions();
+}
+
+function updateSwapNurseOptions() {
+  const dateStr = document.getElementById('reqStartDate').value;
+  const sel = document.getElementById('reqSwapNurse');
+
+  // Determina quem está solicitando para excluí-lo da lista
+  let requesterId = '';
+  if (isAdmin) {
+    requesterId = document.getElementById('reqNurse').value;
+  } else if (currentUser) {
+    requesterId = currentUser.nurseId;
+  }
+
+  if (!dateStr) {
+    // Sem data selecionada: mostra todas (exceto o solicitante)
+    sel.innerHTML = '<option value="">— Seleziona la data prima —</option>';
+    return;
+  }
+
+  const d = new Date(dateStr + 'T00:00:00');
+  const day = d.getDate();
+  const m = d.getMonth();
+  const y = d.getFullYear();
+
+  // Filtra enfermeiras que têm turno naquele dia (excluindo OFF e o solicitante)
+  const filtered = nurses.filter(n => {
+    if (n.id === requesterId) return false;
+    const shift = schedule[`${n.id}_${m}_${y}_${day}`] || 'OFF';
+    return shift !== 'OFF';
+  });
+
+  if (filtered.length === 0) {
+    sel.innerHTML = '<option value="">— Nessuna disponibile in questa data —</option>';
+  } else {
+    sel.innerHTML = filtered.map(n => {
+      const shift = schedule[`${n.id}_${m}_${y}_${day}`] || 'OFF';
+      const shiftName = SHIFTS[shift] ? SHIFTS[shift].name : shift;
+      return `<option value="${n.id}">${n.name} (${shift} — ${shiftName})</option>`;
+    }).join('');
+  }
 }
 
 async function submitNewRequest() {
@@ -1272,6 +1329,18 @@ async function submitNewRequest() {
     nurseName = currentUser.nome;
   }
 
+  // Captura dados da enfermeira de troca (swap)
+  let swapNurseId = '', swapNurseName = '';
+  if (type === 'swap') {
+    swapNurseId = document.getElementById('reqSwapNurse').value;
+    const swapNurse = nurses.find(n => n.id === swapNurseId);
+    swapNurseName = swapNurse ? swapNurse.name : '';
+    if (!swapNurseId) {
+      toast('Seleziona la persona per il cambio', 'warning');
+      return;
+    }
+  }
+
   const req = {
     id: generateId(),
     type,
@@ -1281,6 +1350,8 @@ async function submitNewRequest() {
     startDate,
     endDate: ['FE', 'AT'].includes(type) ? endDate : startDate,
     desc,
+    swapNurseId,
+    swapNurseName,
     createdAt: new Date().toISOString(),
     approvedAt: '',
     approvedBy: ''

@@ -727,8 +727,120 @@ function hydrateFromCache() {
   return hasData;
 }
 
+// ── NURSE PERSONAL METRICS (non-admin only) ─────────────────
+function renderNurseMetrics() {
+  const panel = document.getElementById('nurseMetricsPanel');
+  if (!panel) return;
+
+  // Only show for nurses (non-admin) with a linked nurseId
+  if (isAdmin || !currentUser || !currentUser.nurseId) {
+    panel.style.display = 'none';
+    return;
+  }
+
+  const nId = currentUser.nurseId;
+  const nurse = nurses.find(n => n.id === nId);
+  if (!nurse) { panel.style.display = 'none'; return; }
+
+  const m = currentMonth.getMonth();
+  const y = currentMonth.getFullYear();
+  const days = daysInMonth(currentMonth);
+
+  // Check if there's any schedule data for this month
+  const hasData = Object.keys(schedule).some(k => k.includes(`_${m}_${y}_`));
+  if (!hasData) { panel.style.display = 'none'; return; }
+
+  // Compute metrics
+  let totalH = 0, workDays = 0, restDays = 0;
+  const shiftCounts = {};
+  let nightCount = 0, feCount = 0, atCount = 0;
+  let festiviWorked = 0;
+
+  for (let d = 1; d <= days; d++) {
+    const code = getShift(nId, d);
+    const sh = SHIFTS[code];
+    if (!sh) continue;
+
+    totalH += sh.h;
+    shiftCounts[code] = (shiftCounts[code] || 0) + 1;
+
+    if (['OFF'].includes(code)) { restDays++; }
+    else if (code === 'FE') { feCount++; restDays++; }
+    else if (code === 'AT') { atCount++; restDays++; }
+    else { workDays++; }
+
+    if (code === 'N') nightCount++;
+
+    // Festivi worked
+    const dow = new Date(y, m, d).getDay();
+    if ((dow === 0 || dow === 6) && !['OFF','FE','AT'].includes(code)) {
+      festiviWorked++;
+    }
+  }
+
+  const nightQuota = nurse.nightQuota || 5;
+  const nightPct = Math.min((nightCount / nightQuota) * 100, 100).toFixed(0);
+  const nightColor = nightCount > nightQuota ? '#ef4444' : nightCount === nightQuota ? '#fbbf24' : '#8b5cf6';
+
+  // Active shift codes to display
+  const activeCodes = ['M1','M2','MF','G','P','PF','N','FE','AT','OFF'];
+
+  panel.style.display = 'block';
+  panel.innerHTML = `
+    <div class="nmp-header">
+      <span style="font-size:18px;">📊</span>
+      <h3>Le Mie Metriche</h3>
+    </div>
+
+    <!-- KPI summary -->
+    <div class="nmp-kpi-row">
+      <div class="nmp-kpi accent-purple">
+        <div class="nmp-kpi-val">${totalH.toFixed(1)}h</div>
+        <div class="nmp-kpi-lbl">Ore Totali</div>
+      </div>
+      <div class="nmp-kpi accent-blue">
+        <div class="nmp-kpi-val">${workDays}</div>
+        <div class="nmp-kpi-lbl">Giorni Lavorati</div>
+      </div>
+      <div class="nmp-kpi accent-green">
+        <div class="nmp-kpi-val">${restDays}</div>
+        <div class="nmp-kpi-lbl">Giorni Riposo</div>
+      </div>
+      <div class="nmp-kpi accent-amber">
+        <div class="nmp-kpi-val">${festiviWorked}</div>
+        <div class="nmp-kpi-lbl">Festivi Lavorati</div>
+      </div>
+    </div>
+
+    <!-- Shift distribution chips -->
+    <div class="nmp-shifts-grid">
+      ${activeCodes.map(c => {
+        const s = SHIFTS[c];
+        const cnt = shiftCounts[c] || 0;
+        const opacity = cnt > 0 ? '1' : '0.35';
+        return `<div class="nmp-shift-chip" style="background:${s.color}; opacity:${opacity};">
+          <span class="nmp-shift-code" style="color:${s.text}">${c}</span>
+          <span class="nmp-shift-count" style="color:${s.text}">${cnt}</span>
+        </div>`;
+      }).join('')}
+    </div>
+
+    <!-- Night quota bar -->
+    <div class="nmp-bar-wrap">
+      <div class="nmp-bar-label">
+        <span>🌙 Quota Notturni</span>
+        <span style="color:${nightColor}">${nightCount}/${nightQuota}</span>
+      </div>
+      <div class="nmp-bar-track">
+        <div class="nmp-bar-fill" style="width:${nightPct}%; background:${nightColor};"></div>
+      </div>
+    </div>
+  `;
+}
+
 function renderAll() {
   renderCalendar();
+  renderNurseMetrics();
   renderRequests();
   populateFilterNurse();
   populateCalendarFilter();
@@ -882,7 +994,7 @@ function buildLegend() {
 function changeMonth(dir) {
   currentMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + dir, 1);
   updateMonthDisplay();
-  loadSchedule().then(() => renderCalendar());
+  loadSchedule().then(() => { renderCalendar(); renderNurseMetrics(); });
 }
 
 function updateMonthDisplay() {

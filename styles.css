@@ -1900,3 +1900,111 @@ input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(1) bright
   vertical-align: middle;
   margin: 0 2px;
 }
+
+/* ── Nurse Personal Metrics Panel ── */
+.nurse-metrics-panel {
+  margin-top: 16px;
+  padding: 0 2px;
+}
+.nmp-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding: 0 2px;
+}
+.nmp-header h3 {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--text-1);
+  margin: 0;
+}
+.nmp-kpi-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.nmp-kpi {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 12px;
+  padding: 12px 10px;
+  text-align: center;
+}
+.nmp-kpi-val {
+  font-size: 22px;
+  font-weight: 900;
+  line-height: 1.1;
+}
+.nmp-kpi-lbl {
+  font-size: 10px;
+  color: var(--text-3);
+  margin-top: 3px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+.nmp-kpi.accent-purple .nmp-kpi-val { color: var(--primary-light); }
+.nmp-kpi.accent-blue .nmp-kpi-val   { color: #38bdf8; }
+.nmp-kpi.accent-green .nmp-kpi-val  { color: #34d399; }
+.nmp-kpi.accent-amber .nmp-kpi-val  { color: #fbbf24; }
+
+.nmp-shifts-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.nmp-shift-chip {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  padding: 8px 4px;
+  min-height: 48px;
+}
+.nmp-shift-code {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+}
+.nmp-shift-count {
+  font-size: 18px;
+  font-weight: 900;
+  line-height: 1.1;
+  margin-top: 2px;
+}
+.nmp-bar-wrap {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 12px;
+  padding: 12px;
+}
+.nmp-bar-label {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+.nmp-bar-label span:first-child {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-2);
+}
+.nmp-bar-label span:last-child {
+  font-size: 12px;
+  font-weight: 800;
+}
+.nmp-bar-track {
+  height: 8px;
+  background: rgba(255,255,255,0.06);
+  border-radius: 99px;
+  overflow: hidden;
+}
+.nmp-bar-fill {
+  height: 100%;
+  border-radius: 99px;
+  transition: width 0.6s ease;
+}

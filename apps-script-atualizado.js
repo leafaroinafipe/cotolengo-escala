@@ -215,14 +215,26 @@ function bulkWriteData(sheet, clearFilter, clearAll, dataRows) {
     }
   }
   // Se clearFilter é fornecido, deleta linhas que correspondem ao filtro
-  else if (clearFilter && clearFilter.column && clearFilter.value !== undefined) {
-    var rows = sheet.getDataRange().getValues();
-    var headers = rows[0];
-    var keyIdx = headers.indexOf(clearFilter.column);
-    if (keyIdx !== -1) {
-      for (var i = rows.length - 1; i >= 1; i--) {
-        if (String(rows[i][keyIdx]) === String(clearFilter.value)) {
-          sheet.deleteRow(i + 1);
+  // Suporta filtro composto: clearFilter pode ser objeto único OU array de filtros (AND)
+  else if (clearFilter) {
+    var filters = Array.isArray(clearFilter) ? clearFilter : [clearFilter];
+    // Valida que todos os filtros têm column e value
+    var validFilters = filters.filter(function(f) { return f && f.column && f.value !== undefined; });
+    if (validFilters.length > 0) {
+      var rows = sheet.getDataRange().getValues();
+      var headers = rows[0];
+      var filterIndices = validFilters.map(function(f) {
+        return { idx: headers.indexOf(f.column), value: String(f.value) };
+      }).filter(function(f) { return f.idx !== -1; });
+
+      if (filterIndices.length > 0) {
+        for (var i = rows.length - 1; i >= 1; i--) {
+          var matchAll = filterIndices.every(function(f) {
+            return String(rows[i][f.idx]) === f.value;
+          });
+          if (matchAll) {
+            sheet.deleteRow(i + 1);
+          }
         }
       }
     }

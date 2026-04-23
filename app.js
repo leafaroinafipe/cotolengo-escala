@@ -5,7 +5,7 @@
 // ============================================================
 
 // ── CONFIG ────────────────────────────────────────────────────
-const GOOGLE_API_URL = 'https://script.google.com/macros/s/AKfycbwsfN_I_dP8H6C7odQDPeppoecyiUPAtdo6_P3bBgIj_vfMULKX6Qm5XyZB4P2zmYWiqQ/exec';
+const GOOGLE_API_URL = 'https://script.google.com/macros/s/AKfycbw7Hzr4C0V7cIM0pnU7ehbT3rpiwg-BTBpb7hnkgzIICYIbf8tBHXdjw82bFzTVVh2XxA/exec';
 const API_KEY = 'cotolengo_2026_secure_key';
 
 // ── UTILS: SHA-256 Hash (para senhas) ───────────────────────

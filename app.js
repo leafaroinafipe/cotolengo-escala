@@ -742,47 +742,79 @@ function renderNurseMetrics() {
   const nurse = nurses.find(n => n.id === nId);
   if (!nurse) { panel.style.display = 'none'; return; }
 
-  const m = currentMonth.getMonth();
-  const y = currentMonth.getFullYear();
-  const days = daysInMonth(currentMonth);
+  // ── Get ALL raw escala data from cache to compute accumulated metrics ──
+  const rawEscala = (() => {
+    const c = cacheGet('Escala');
+    return (c && Array.isArray(c.data)) ? c.data : [];
+  })();
 
-  // Check if there's any schedule data for this month
-  const hasData = Object.keys(schedule).some(k => k.includes(`_${m}_${y}_`));
-  if (!hasData) { panel.style.display = 'none'; return; }
+  // Filter rows for this nurse only
+  const myRows = rawEscala.filter(r => String(r.nurseId).trim() === String(nId).trim());
+  if (myRows.length === 0) { panel.style.display = 'none'; return; }
 
-  // Compute metrics
-  let totalH = 0, workDays = 0, restDays = 0;
-  const shiftCounts = {};
-  let nightCount = 0, feCount = 0, atCount = 0;
-  let festiviWorked = 0;
+  // ── Compute ACCUMULATED metrics across all months ──
+  let accH = 0, accWork = 0, accRest = 0, accNights = 0;
+  let accFE = 0, accAT = 0, accFestivi = 0;
+  const accShiftCounts = {};
+  const monthlyData = []; // { month, year, label, hours, nights, workDays }
 
-  for (let d = 1; d <= days; d++) {
-    const code = getShift(nId, d);
-    const sh = SHIFTS[code];
-    if (!sh) continue;
+  myRows.forEach(row => {
+    const rowMonth = parseInt(String(row.month || '0').trim());
+    const rowYear = parseInt(String(row.year || '0').trim());
+    if (rowMonth < 1 || rowMonth > 12 || !rowYear) return;
+    const mo = rowMonth - 1; // JS 0-indexed
+    const daysInMo = new Date(rowYear, mo + 1, 0).getDate();
 
-    totalH += sh.h;
-    shiftCounts[code] = (shiftCounts[code] || 0) + 1;
+    let moH = 0, moWork = 0, moNights = 0;
 
-    if (['OFF'].includes(code)) { restDays++; }
-    else if (code === 'FE') { feCount++; restDays++; }
-    else if (code === 'AT') { atCount++; restDays++; }
-    else { workDays++; }
+    for (let d = 1; d <= daysInMo; d++) {
+      const val = String(row['d' + d] || '').trim();
+      if (!val || val === 'undefined') continue;
+      const sh = SHIFTS[val];
+      if (!sh) continue;
 
-    if (code === 'N') nightCount++;
+      accH += sh.h;
+      moH += sh.h;
+      accShiftCounts[val] = (accShiftCounts[val] || 0) + 1;
 
-    // Festivi worked
-    const dow = new Date(y, m, d).getDay();
-    if ((dow === 0 || dow === 6) && !['OFF','FE','AT'].includes(code)) {
-      festiviWorked++;
+      if (val === 'OFF') { accRest++; }
+      else if (val === 'FE') { accFE++; accRest++; }
+      else if (val === 'AT') { accAT++; accRest++; }
+      else { accWork++; moWork++; }
+
+      if (val === 'N') { accNights++; moNights++; }
+
+      const dow = new Date(rowYear, mo, d).getDay();
+      if ((dow === 0 || dow === 6) && !['OFF','FE','AT'].includes(val)) {
+        accFestivi++;
+      }
     }
-  }
 
+    monthlyData.push({
+      month: mo, year: rowYear,
+      label: MONTH_NAMES[mo].substring(0, 3),
+      hours: moH, nights: moNights, workDays: moWork
+    });
+  });
+
+  // Sort monthly data chronologically
+  monthlyData.sort((a, b) => (a.year * 12 + a.month) - (b.year * 12 + b.month));
+
+  // ── Absence requests for this nurse ──
+  const myRequests = requests.filter(r =>
+    String(r.nurseId) === String(nId) && r.status === 'approved'
+  );
+  const pendingRequests = requests.filter(r =>
+    String(r.nurseId) === String(nId) && r.status === 'pending'
+  );
+
+  // Determine totals
+  const totalMonths = monthlyData.length;
   const nightQuota = nurse.nightQuota || 5;
-  const nightPct = Math.min((nightCount / nightQuota) * 100, 100).toFixed(0);
-  const nightColor = nightCount > nightQuota ? '#ef4444' : nightCount === nightQuota ? '#fbbf24' : '#8b5cf6';
+  const accNightQuota = nightQuota * totalMonths;
+  const accNightPct = accNightQuota > 0 ? Math.min((accNights / accNightQuota) * 100, 100).toFixed(0) : '0';
+  const nightColor = accNights > accNightQuota ? '#ef4444' : parseInt(accNightPct) >= 90 ? '#fbbf24' : '#8b5cf6';
 
-  // Active shift codes to display
   const activeCodes = ['M1','M2','MF','G','P','PF','N','FE','AT','OFF'];
 
   panel.style.display = 'block';
@@ -790,25 +822,42 @@ function renderNurseMetrics() {
     <div class="nmp-header">
       <span style="font-size:18px;">📊</span>
       <h3>Le Mie Metriche</h3>
+      <span style="margin-left:auto; font-size:11px; color:var(--text-3); font-weight:600;">Accumulato ${totalMonths} ${totalMonths === 1 ? 'mese' : 'mesi'}</span>
     </div>
 
-    <!-- KPI summary -->
+    <!-- KPI summary — accumulated -->
     <div class="nmp-kpi-row">
       <div class="nmp-kpi accent-purple">
-        <div class="nmp-kpi-val">${totalH.toFixed(1)}h</div>
+        <div class="nmp-kpi-val">${accH.toFixed(1)}h</div>
         <div class="nmp-kpi-lbl">Ore Totali</div>
       </div>
       <div class="nmp-kpi accent-blue">
-        <div class="nmp-kpi-val">${workDays}</div>
+        <div class="nmp-kpi-val">${accWork}</div>
         <div class="nmp-kpi-lbl">Giorni Lavorati</div>
       </div>
       <div class="nmp-kpi accent-green">
-        <div class="nmp-kpi-val">${restDays}</div>
-        <div class="nmp-kpi-lbl">Giorni Riposo</div>
+        <div class="nmp-kpi-val">${accNights}</div>
+        <div class="nmp-kpi-lbl">Notti Totali</div>
       </div>
       <div class="nmp-kpi accent-amber">
-        <div class="nmp-kpi-val">${festiviWorked}</div>
+        <div class="nmp-kpi-val">${accFestivi}</div>
         <div class="nmp-kpi-lbl">Festivi Lavorati</div>
+      </div>
+    </div>
+
+    <!-- Absence summary -->
+    <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px; margin-bottom:10px;">
+      <div style="background:rgba(16,185,129,0.1); border:1px solid rgba(16,185,129,0.2); border-radius:10px; padding:10px 6px; text-align:center;">
+        <div style="font-size:20px; font-weight:900; color:#34d399;">${accFE}</div>
+        <div style="font-size:9px; color:var(--text-3); font-weight:700; text-transform:uppercase; margin-top:2px;">Ferie</div>
+      </div>
+      <div style="background:rgba(239,68,68,0.1); border:1px solid rgba(239,68,68,0.2); border-radius:10px; padding:10px 6px; text-align:center;">
+        <div style="font-size:20px; font-weight:900; color:#f87171;">${accAT}</div>
+        <div style="font-size:9px; color:var(--text-3); font-weight:700; text-transform:uppercase; margin-top:2px;">Certificati</div>
+      </div>
+      <div style="background:rgba(245,158,11,0.1); border:1px solid rgba(245,158,11,0.2); border-radius:10px; padding:10px 6px; text-align:center;">
+        <div style="font-size:20px; font-weight:900; color:#fbbf24;">${pendingRequests.length}</div>
+        <div style="font-size:9px; color:var(--text-3); font-weight:700; text-transform:uppercase; margin-top:2px;">In Attesa</div>
       </div>
     </div>
 
@@ -816,7 +865,7 @@ function renderNurseMetrics() {
     <div class="nmp-shifts-grid">
       ${activeCodes.map(c => {
         const s = SHIFTS[c];
-        const cnt = shiftCounts[c] || 0;
+        const cnt = accShiftCounts[c] || 0;
         const opacity = cnt > 0 ? '1' : '0.35';
         return `<div class="nmp-shift-chip" style="background:${s.color}; opacity:${opacity};">
           <span class="nmp-shift-code" style="color:${s.text}">${c}</span>
@@ -825,16 +874,34 @@ function renderNurseMetrics() {
       }).join('')}
     </div>
 
-    <!-- Night quota bar -->
-    <div class="nmp-bar-wrap">
+    <!-- Night quota bar (accumulated) -->
+    <div class="nmp-bar-wrap" style="margin-bottom:10px;">
       <div class="nmp-bar-label">
-        <span>🌙 Quota Notturni</span>
-        <span style="color:${nightColor}">${nightCount}/${nightQuota}</span>
+        <span>🌙 Notti Accumulate</span>
+        <span style="color:${nightColor}">${accNights}/${accNightQuota}</span>
       </div>
       <div class="nmp-bar-track">
-        <div class="nmp-bar-fill" style="width:${nightPct}%; background:${nightColor};"></div>
+        <div class="nmp-bar-fill" style="width:${accNightPct}%; background:${nightColor};"></div>
       </div>
     </div>
+
+    <!-- Monthly breakdown mini-table -->
+    ${monthlyData.length > 1 ? `
+    <div class="nmp-bar-wrap">
+      <div style="font-size:11px; font-weight:700; color:var(--text-2); margin-bottom:8px;">📅 Dettaglio Mensile</div>
+      <div style="display:grid; gap:6px;">
+        ${monthlyData.map(md => {
+          const barW = accH > 0 ? ((md.hours / accH) * 100).toFixed(0) : 0;
+          return `<div style="display:flex; align-items:center; gap:8px;">
+            <span style="min-width:34px; font-size:11px; font-weight:700; color:var(--text-3);">${md.label}</span>
+            <div style="flex:1; height:6px; background:rgba(255,255,255,0.06); border-radius:99px; overflow:hidden;">
+              <div style="width:${barW}%; height:100%; background:var(--primary); border-radius:99px;"></div>
+            </div>
+            <span style="min-width:44px; text-align:right; font-size:11px; font-weight:700; color:var(--text-2);">${md.hours.toFixed(0)}h</span>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>` : ''}
   `;
 }
 
@@ -1380,7 +1447,6 @@ function onReqDateChange() {
 }
 
 function updateSwapNurseOptions() {
-  const dateStr = document.getElementById('reqStartDate').value;
   const sel = document.getElementById('reqSwapNurse');
 
   // Determina quem está solicitando para excluí-lo da lista
@@ -1391,32 +1457,13 @@ function updateSwapNurseOptions() {
     requesterId = currentUser.nurseId;
   }
 
-  if (!dateStr) {
-    // Sem data selecionada: mostra todas (exceto o solicitante)
-    sel.innerHTML = '<option value="">— Seleziona la data prima —</option>';
-    return;
-  }
+  // Mostra todas as enfermeiras (exceto o solicitante)
+  const available = nurses.filter(n => n.id !== requesterId);
 
-  const d = new Date(dateStr + 'T00:00:00');
-  const day = d.getDate();
-  const m = d.getMonth();
-  const y = d.getFullYear();
-
-  // Filtra enfermeiras que têm turno naquele dia (excluindo OFF e o solicitante)
-  const filtered = nurses.filter(n => {
-    if (n.id === requesterId) return false;
-    const shift = schedule[`${n.id}_${m}_${y}_${day}`] || 'OFF';
-    return shift !== 'OFF';
-  });
-
-  if (filtered.length === 0) {
-    sel.innerHTML = '<option value="">— Nessuna disponibile in questa data —</option>';
+  if (available.length === 0) {
+    sel.innerHTML = '<option value="">— Nessuna disponibile —</option>';
   } else {
-    sel.innerHTML = filtered.map(n => {
-      const shift = schedule[`${n.id}_${m}_${y}_${day}`] || 'OFF';
-      const shiftName = SHIFTS[shift] ? SHIFTS[shift].name : shift;
-      return `<option value="${n.id}">${n.name} (${shift} — ${shiftName})</option>`;
-    }).join('');
+    sel.innerHTML = available.map(n => `<option value="${n.id}">${n.name}</option>`).join('');
   }
 }
 

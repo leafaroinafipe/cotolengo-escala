@@ -3,7 +3,7 @@
 //  Cache offline para o PWA — API calls bypass SW completely
 // ============================================================
 
-const CACHE_VERSION = '8';
+const CACHE_VERSION = '9';
 const CACHE_NAME = `cottolengo-escala-${CACHE_VERSION}`;
 const ASSETS = [
   './',

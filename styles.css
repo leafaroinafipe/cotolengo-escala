@@ -309,6 +309,95 @@ body {
   color: var(--text-4);
 }
 
+/* ── BIOMETRIC LOGIN BUTTON ─────────────────────────── */
+.biometric-login-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  padding: 12px 16px;
+  margin-top: 12px;
+  background: rgba(255,255,255,0.05);
+  border: 1.5px dashed rgba(167,139,250,0.5);
+  color: var(--text, #fff);
+  border-radius: var(--radius-md, 12px);
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s;
+}
+.biometric-login-btn:hover,
+.biometric-login-btn:active {
+  background: rgba(167,139,250,0.15);
+  border-color: rgba(167,139,250,0.9);
+}
+.biometric-hint {
+  margin-top: 10px;
+  padding: 8px 10px;
+  font-size: 11.5px;
+  color: var(--text-3, rgba(255,255,255,0.7));
+  background: rgba(255,255,255,0.04);
+  border-radius: 8px;
+  line-height: 1.4;
+}
+
+/* ── INSTALL TOP BAR (above header — vanishes after install) ── */
+.install-top-bar {
+  position: relative;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  padding-top: calc(10px + var(--safe-top));
+  padding-left: max(12px, var(--safe-left));
+  padding-right: max(12px, var(--safe-right));
+  background: linear-gradient(135deg, var(--primary, #4f46e5), var(--accent, #7c3aed));
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  animation: slideDownTopBar 0.35s ease-out;
+}
+.install-top-bar-icon { font-size: 18px; flex-shrink: 0; }
+.install-top-bar-text {
+  flex: 1;
+  line-height: 1.3;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.install-top-bar-btn {
+  background: rgba(255,255,255,0.25);
+  border: 1px solid rgba(255,255,255,0.4);
+  color: #fff;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: background 0.2s;
+  flex-shrink: 0;
+}
+.install-top-bar-btn:hover,
+.install-top-bar-btn:active { background: rgba(255,255,255,0.4); }
+.install-top-bar-close {
+  background: transparent;
+  border: none;
+  color: rgba(255,255,255,0.85);
+  padding: 4px 8px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  flex-shrink: 0;
+  border-radius: 999px;
+}
+.install-top-bar-close:hover { background: rgba(255,255,255,0.15); }
+@keyframes slideDownTopBar {
+  from { transform: translateY(-100%); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
 /* ── APP HEADER ───────────────────────────────────── */
 .app-header {
   position: relative;
@@ -2007,4 +2096,289 @@ input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(1) bright
   height: 100%;
   border-radius: 99px;
   transition: width 0.6s ease;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   REPORT TAB — Mobile Report Page (non-admin employees)
+   ═══════════════════════════════════════════════════════════════ */
+
+/* Report page header */
+.report-page-header {
+  margin-bottom: 8px;
+}
+
+/* Report month navigator */
+.report-month-nav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+.report-month-label {
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: -0.3px;
+  color: var(--text);
+  min-width: 160px;
+  text-align: center;
+}
+
+/* KPI Grid */
+.rpt-kpi-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.rpt-kpi-card {
+  background: var(--bg-card);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  padding: 16px 14px;
+  text-align: center;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  position: relative;
+  overflow: hidden;
+  transition: transform 0.15s;
+}
+.rpt-kpi-card:active { transform: scale(0.97); }
+.rpt-kpi-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 3px;
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+}
+.rpt-accent-purple::before { background: linear-gradient(90deg, #8b5cf6, #a78bfa); }
+.rpt-accent-blue::before { background: linear-gradient(90deg, #0ea5e9, #38bdf8); }
+.rpt-accent-green::before { background: linear-gradient(90deg, #10b981, #34d399); }
+.rpt-accent-indigo::before { background: linear-gradient(90deg, #1e1b4b, #6366f1); }
+.rpt-accent-amber::before { background: linear-gradient(90deg, #f59e0b, #fbbf24); }
+
+.rpt-kpi-icon {
+  font-size: 22px;
+  margin-bottom: 6px;
+}
+.rpt-kpi-val {
+  font-size: 28px;
+  font-weight: 900;
+  color: var(--text);
+  line-height: 1.1;
+  letter-spacing: -0.5px;
+}
+.rpt-kpi-lbl {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-3);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-top: 4px;
+}
+
+/* Absence Grid */
+.rpt-absence-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  margin-bottom: 16px;
+}
+.rpt-absence-card {
+  border-radius: 10px;
+  padding: 10px 4px;
+  text-align: center;
+  border: 1px solid transparent;
+}
+.rpt-abs-fe {
+  background: rgba(16,185,129,0.10);
+  border-color: rgba(16,185,129,0.20);
+}
+.rpt-abs-at {
+  background: rgba(239,68,68,0.10);
+  border-color: rgba(239,68,68,0.20);
+}
+.rpt-abs-fest {
+  background: rgba(245,158,11,0.10);
+  border-color: rgba(245,158,11,0.20);
+}
+.rpt-abs-pend {
+  background: rgba(139,92,246,0.10);
+  border-color: rgba(139,92,246,0.20);
+}
+.rpt-abs-val {
+  font-size: 20px;
+  font-weight: 900;
+}
+.rpt-abs-fe .rpt-abs-val { color: #34d399; }
+.rpt-abs-at .rpt-abs-val { color: #f87171; }
+.rpt-abs-fest .rpt-abs-val { color: #fbbf24; }
+.rpt-abs-pend .rpt-abs-val { color: #a78bfa; }
+.rpt-abs-lbl {
+  font-size: 8px;
+  font-weight: 700;
+  color: var(--text-3);
+  text-transform: uppercase;
+  margin-top: 2px;
+  letter-spacing: 0.3px;
+}
+
+/* Report Sections */
+.rpt-section {
+  background: var(--bg-card);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  padding: 14px;
+  margin-bottom: 12px;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+.rpt-section-title {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--text-2);
+  margin-bottom: 12px;
+  letter-spacing: -0.2px;
+}
+
+/* Shift Distribution Grid */
+.rpt-shift-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.rpt-shift-chip {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 50px;
+  height: 50px;
+  border-radius: 10px;
+  transition: opacity 0.3s, transform 0.15s;
+}
+.rpt-shift-chip:active { transform: scale(0.92); }
+.rpt-shift-code {
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1;
+}
+.rpt-shift-count {
+  font-size: 16px;
+  font-weight: 900;
+  line-height: 1.2;
+}
+
+/* Night Quota Bar */
+.rpt-bar-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-2);
+}
+.rpt-bar-track {
+  height: 10px;
+  background: rgba(255,255,255,0.06);
+  border-radius: 99px;
+  overflow: hidden;
+}
+.rpt-bar-fill {
+  height: 100%;
+  border-radius: 99px;
+  transition: width 0.8s ease;
+}
+
+/* Accumulated Section */
+.rpt-acc-section {
+  background: linear-gradient(135deg, rgba(139,92,246,0.08), rgba(6,182,212,0.06));
+  border-color: rgba(139,92,246,0.15);
+}
+.rpt-acc-row {
+  display: flex;
+  justify-content: space-around;
+  gap: 8px;
+}
+.rpt-acc-item {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.rpt-acc-val {
+  font-size: 22px;
+  font-weight: 900;
+  color: var(--text);
+  letter-spacing: -0.5px;
+}
+.rpt-acc-lbl {
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--text-3);
+  text-transform: uppercase;
+}
+
+/* Monthly Breakdown */
+.rpt-monthly-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.rpt-monthly-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+}
+.rpt-monthly-row.rpt-month-active {
+  background: rgba(139,92,246,0.08);
+  border-radius: 8px;
+  padding: 6px 8px;
+  margin: 0 -8px;
+}
+.rpt-monthly-label {
+  min-width: 34px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-3);
+}
+.rpt-month-active .rpt-monthly-label { color: var(--primary-light); }
+
+.rpt-monthly-bar-track {
+  flex: 1;
+  height: 8px;
+  background: rgba(255,255,255,0.06);
+  border-radius: 99px;
+  overflow: hidden;
+}
+.rpt-monthly-bar-fill {
+  height: 100%;
+  background: var(--primary);
+  border-radius: 99px;
+  transition: width 0.6s ease;
+}
+.rpt-month-active .rpt-monthly-bar-fill {
+  background: linear-gradient(90deg, var(--primary), var(--primary-light));
+}
+
+.rpt-monthly-val {
+  min-width: 36px;
+  text-align: right;
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--text-2);
+}
+.rpt-monthly-extra {
+  min-width: 24px;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-4);
+  text-align: right;
+}
+
+/* Calendar Filter Wrap */
+.cal-filter-wrap {
+  margin-bottom: 4px;
 }

@@ -129,6 +129,8 @@ function bootstrap() {
   registerServiceWorker();
   initInstallUI();
   showSplash();
+  // Atualiza UI biométrica após DOM ser renderizado
+  setTimeout(() => { try { updateBiometricLoginUI(); } catch (e) {} }, 300);
 }
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', bootstrap);
@@ -196,11 +198,13 @@ function updateInstallUI() {
   if (installPromptReady && deferredPrompt) {
     showInstallButtons();
     showLoginBanner();
+    showInstallTopBar();
     return;
   }
   if (isIOS) {
     showInstallButtons();
     showLoginBanner();
+    showInstallTopBar();
     return;
   }
   hideAllInstallUI();
@@ -211,6 +215,23 @@ function showInstallButtons() {
   if (headerBtn) headerBtn.style.display = 'flex';
   const loginBtn = document.getElementById('loginInstallBtn');
   if (loginBtn) loginBtn.style.display = 'flex';
+}
+
+// Mostra a barra superior de instalação (acima do header), a menos que o usuário já a tenha dispensado.
+function showInstallTopBar() {
+  let dismissed = false;
+  try {
+    dismissed = localStorage.getItem('install_topbar_dismissed') === 'true';
+  } catch (e) {}
+  if (dismissed) return;
+  const bar = document.getElementById('installTopBar');
+  if (bar) bar.style.display = 'flex';
+}
+
+function dismissInstallTopBar() {
+  try { localStorage.setItem('install_topbar_dismissed', 'true'); } catch (e) {}
+  const bar = document.getElementById('installTopBar');
+  if (bar) bar.style.display = 'none';
 }
 
 function showLoginBanner() {
@@ -233,6 +254,8 @@ function hideAllInstallUI() {
   if (loginBtn) loginBtn.style.display = 'none';
   const banner = document.getElementById('loginInstallBanner');
   if (banner) banner.classList.remove('visible');
+  const topBar = document.getElementById('installTopBar');
+  if (topBar) topBar.style.display = 'none';
 }
 
 function dismissInstallBanner() {
@@ -398,7 +421,7 @@ async function ensureSheetSetup() {
   // Ensure the required sheets exist — NÃO toca em Funcionarios (já existe com seus próprios headers)
   try {
     await apiCall('setupHeaders', 'Usuarios', { headers: ['id', 'nome', 'senha', 'role', 'nurseId'] });
-    await apiCall('setupHeaders', 'Solicitacoes', { headers: ['id', 'type', 'status', 'nurseId', 'nurseName', 'startDate', 'endDate', 'desc', 'swapNurseId', 'swapNurseName', 'createdAt', 'approvedAt', 'approvedBy'] });
+    await apiCall('setupHeaders', 'Solicitacoes', { headers: ['id', 'type', 'status', 'nurseId', 'nurseName', 'nursecambio', 'nurseIdcambio', 'startDate', 'endDate', 'desc', 'swapNurseId', 'swapNurseName', 'createdAt', 'approvedAt', 'approvedBy'] });
     await apiCall('setupHeaders', 'Escala', { headers: ['nurseId', 'month', 'year', 'd1','d2','d3','d4','d5','d6','d7','d8','d9','d10','d11','d12','d13','d14','d15','d16','d17','d18','d19','d20','d21','d22','d23','d24','d25','d26','d27','d28','d29','d30','d31'] });
   } catch (e) {
     console.warn('Sheet setup:', e);
@@ -543,6 +566,239 @@ function doLogout() {
   document.getElementById('loginPass').value = '';
   currentPage = 0;
   updateSwipePosition();
+  // Revalida a visibilidade do botão biométrico no login
+  updateBiometricLoginUI();
+}
+
+// ── BIOMETRIC AUTHENTICATION (WebAuthn) ──────────────────
+// Usa as credenciais de plataforma do dispositivo (Touch ID, Face ID, Windows Hello, impronta Android).
+// Armazena apenas o credentialId + userId localmente; a chave privada biométrica fica no Secure Enclave/TPM.
+
+const BIOMETRIC_STORAGE_KEY = 'cotolengo_biometric_v1';
+const BIOMETRIC_RP_NAME = 'Cottolengo Turni';
+
+function biometricSupported() {
+  return !!(window.PublicKeyCredential
+    && navigator.credentials
+    && typeof navigator.credentials.create === 'function'
+    && typeof navigator.credentials.get === 'function');
+}
+
+function getStoredBiometric() {
+  try {
+    const raw = localStorage.getItem(BIOMETRIC_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) { return null; }
+}
+
+function setStoredBiometric(data) {
+  try { localStorage.setItem(BIOMETRIC_STORAGE_KEY, JSON.stringify(data)); }
+  catch (e) { console.warn('Biometric storage failed:', e); }
+}
+
+function clearStoredBiometric() {
+  try { localStorage.removeItem(BIOMETRIC_STORAGE_KEY); } catch (e) {}
+}
+
+// Helpers para conversão ArrayBuffer <-> base64url
+function bufToB64url(buf) {
+  const bytes = new Uint8Array(buf);
+  let str = '';
+  for (let i = 0; i < bytes.length; i++) str += String.fromCharCode(bytes[i]);
+  return btoa(str).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+function b64urlToBuf(b64url) {
+  const b64 = b64url.replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((b64url.length + 3) % 4);
+  const binary = atob(b64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes.buffer;
+}
+
+// Atualiza visibilidade do botão biométrico na tela de login.
+function updateBiometricLoginUI() {
+  const btn = document.getElementById('biometricLoginBtn');
+  const hint = document.getElementById('biometricHint');
+  if (!btn) return;
+  if (!biometricSupported()) {
+    btn.style.display = 'none';
+    if (hint) hint.style.display = 'none';
+    return;
+  }
+  const stored = getStoredBiometric();
+  if (stored && stored.credentialId && stored.userId) {
+    btn.style.display = 'flex';
+    if (hint) hint.style.display = 'none';
+  } else {
+    btn.style.display = 'none';
+    if (hint) hint.style.display = 'block';
+  }
+}
+
+// Mostra/esconde o toggle biométrico no header após login.
+function updateBiometricToggleUI() {
+  const btn = document.getElementById('biometricToggleBtn');
+  if (!btn) return;
+  if (!biometricSupported() || !currentUser) {
+    btn.style.display = 'none';
+    return;
+  }
+  btn.style.display = 'flex';
+  const stored = getStoredBiometric();
+  const isEnabled = stored && String(stored.userId) === String(currentUser.id);
+  btn.title = isEnabled
+    ? 'Biometria abilitata — clicca per disabilitare'
+    : 'Abilita accesso biometrico su questo dispositivo';
+  btn.style.color = isEnabled ? 'var(--primary, #a78bfa)' : '';
+}
+
+// Registra credencial biométrica para o usuário logado atualmente.
+async function registerBiometric() {
+  if (!biometricSupported()) {
+    toast('Il tuo dispositivo non supporta l\'autenticazione biometrica', 'error');
+    return false;
+  }
+  if (!currentUser) {
+    toast('Devi prima effettuare l\'accesso', 'warning');
+    return false;
+  }
+  try {
+    // Usa ID aleatório para o challenge (registro não depende do servidor aqui)
+    const challenge = new Uint8Array(32);
+    crypto.getRandomValues(challenge);
+    const userIdBytes = new TextEncoder().encode(String(currentUser.id));
+
+    const credential = await navigator.credentials.create({
+      publicKey: {
+        challenge: challenge,
+        rp: { name: BIOMETRIC_RP_NAME, id: location.hostname },
+        user: {
+          id: userIdBytes,
+          name: currentUser.nome || String(currentUser.id),
+          displayName: currentUser.nome || String(currentUser.id)
+        },
+        pubKeyCredParams: [
+          { type: 'public-key', alg: -7 },    // ES256
+          { type: 'public-key', alg: -257 }   // RS256
+        ],
+        authenticatorSelection: {
+          authenticatorAttachment: 'platform',  // biometria do próprio dispositivo
+          userVerification: 'required',
+          residentKey: 'preferred'
+        },
+        timeout: 60000,
+        attestation: 'none'
+      }
+    });
+
+    if (!credential) {
+      toast('Registrazione annullata', 'info');
+      return false;
+    }
+
+    setStoredBiometric({
+      credentialId: bufToB64url(credential.rawId),
+      userId: String(currentUser.id),
+      userName: currentUser.nome,
+      createdAt: new Date().toISOString()
+    });
+
+    toast('Accesso biometrico attivato! 🔒', 'success');
+    updateBiometricLoginUI();
+    updateBiometricToggleUI();
+    return true;
+  } catch (err) {
+    console.error('[biometric register] Erro:', err);
+    if (err && err.name === 'NotAllowedError') {
+      toast('Operazione annullata o non consentita', 'warning');
+    } else {
+      toast('Registrazione biometrica fallita', 'error');
+    }
+    return false;
+  }
+}
+
+// Desativa biometria (remove credencial local).
+function unregisterBiometric() {
+  clearStoredBiometric();
+  toast('Accesso biometrico disabilitato', 'info');
+  updateBiometricLoginUI();
+  updateBiometricToggleUI();
+}
+
+// Alterna registro/desregistro a partir do botão no header.
+async function toggleBiometricRegistration() {
+  const stored = getStoredBiometric();
+  const isEnabledForMe = stored && currentUser && String(stored.userId) === String(currentUser.id);
+  if (isEnabledForMe) {
+    if (!confirm('Disabilitare l\'accesso biometrico su questo dispositivo?')) return;
+    unregisterBiometric();
+  } else {
+    if (stored && stored.userId && currentUser && String(stored.userId) !== String(currentUser.id)) {
+      if (!confirm('Un altro utente ha già registrato la biometria su questo dispositivo. Sostituirla con il tuo accesso?')) return;
+    }
+    await registerBiometric();
+  }
+}
+
+// Realiza login usando credencial biométrica armazenada.
+async function doBiometricLogin() {
+  if (!biometricSupported()) {
+    toast('Il tuo dispositivo non supporta l\'autenticazione biometrica', 'error');
+    return;
+  }
+  const stored = getStoredBiometric();
+  if (!stored || !stored.credentialId || !stored.userId) {
+    toast('Nessuna biometria registrata su questo dispositivo', 'warning');
+    return;
+  }
+  try {
+    const challenge = new Uint8Array(32);
+    crypto.getRandomValues(challenge);
+
+    const assertion = await navigator.credentials.get({
+      publicKey: {
+        challenge: challenge,
+        allowCredentials: [{
+          type: 'public-key',
+          id: b64urlToBuf(stored.credentialId),
+          transports: ['internal']
+        }],
+        userVerification: 'required',
+        timeout: 60000,
+        rpId: location.hostname
+      }
+    });
+
+    if (!assertion) {
+      toast('Autenticazione annullata', 'info');
+      return;
+    }
+
+    // O fato do assertion ter sucesso já prova que o usuário passou na biometria local.
+    const user = (appUsers || []).find(u => String(u.id) === String(stored.userId));
+    if (!user) {
+      toast('Utente non più presente — riaccedere con password', 'error');
+      clearStoredBiometric();
+      updateBiometricLoginUI();
+      return;
+    }
+
+    currentUser = user;
+    isAdmin = user.role === 'admin';
+    localStorage.setItem('cotolengo_session', JSON.stringify({ userId: user.id }));
+    const errorEl = document.getElementById('loginError');
+    if (errorEl) errorEl.textContent = '';
+    enterApp();
+    toast(`Benvenuto/a, ${user.nome}! 👋`, 'success');
+  } catch (err) {
+    console.error('[biometric login] Erro:', err);
+    if (err && err.name === 'NotAllowedError') {
+      toast('Autenticazione annullata', 'warning');
+    } else {
+      toast('Accesso biometrico fallito — usa la password', 'error');
+    }
+  }
 }
 
 function enterApp() {
@@ -555,11 +811,19 @@ function enterApp() {
   document.getElementById('headerName').textContent = currentUser.nome;
   document.getElementById('headerRole').textContent = isAdmin ? 'Amministratore' : 'Dipendente';
 
-  // Show/hide admin tab
-  totalPages = isAdmin ? 3 : 2;
+  // Show/hide admin tab and report tab
+  // Admin: Turni(0) + Richieste(1) + Utenti(2) = 3 pages
+  // User:  Turni(0) + Richieste(1) + Report(2) = 3 pages
+  totalPages = 3;
   document.getElementById('navAdminBtn').style.display = isAdmin ? 'flex' : 'none';
   document.getElementById('dotAdmin').style.display = isAdmin ? 'block' : 'none';
   document.getElementById('pageAdmin').style.display = isAdmin ? 'block' : 'none';
+
+  // Report tab: visible only for non-admin (employees)
+  const showReport = !isAdmin;
+  document.getElementById('navReportBtn').style.display = showReport ? 'flex' : 'none';
+  document.getElementById('dotReport').style.display = showReport ? 'block' : 'none';
+  document.getElementById('pageReport').style.display = showReport ? 'block' : 'none';
 
   // Build UI
   buildLegend();
@@ -567,6 +831,27 @@ function enterApp() {
   updateMonthDisplay();
   setupSwipe();
   loadAllData();
+
+  // Atualiza o toggle biométrico no header
+  try { updateBiometricToggleUI(); } catch (e) {}
+
+  // Oferece ativar biometria após primeiro login bem-sucedido (apenas se suportado e nunca perguntado)
+  try {
+    if (biometricSupported()) {
+      const stored = getStoredBiometric();
+      const promptedKey = `biometric_prompted_${currentUser.id}`;
+      const alreadyAsked = localStorage.getItem(promptedKey) === '1';
+      const alreadyRegistered = stored && String(stored.userId) === String(currentUser.id);
+      if (!alreadyRegistered && !alreadyAsked) {
+        setTimeout(() => {
+          if (confirm('Vuoi abilitare l\'accesso biometrico (impronta / Face ID) su questo dispositivo per accessi futuri più rapidi?')) {
+            registerBiometric();
+          }
+          try { localStorage.setItem(promptedKey, '1'); } catch (e) {}
+        }, 1500);
+      }
+    }
+  } catch (e) { console.warn('[biometric prompt] skip:', e); }
 }
 
 // ── CALENDAR FILTER ──────────────────────────────────────────
@@ -912,6 +1197,7 @@ function renderAll() {
   populateFilterNurse();
   populateCalendarFilter();
   if (isAdmin) renderAdminUsers();
+  if (!isAdmin) renderReportTab();
   updateBadges();
 }
 
@@ -1242,29 +1528,57 @@ function setStatusFilter(filter, el) {
 }
 
 function applyFilters() {
-  statusFilter = document.getElementById('filterStatus').value;
-  nurseFilter = document.getElementById('filterNurse').value;
+  const statusEl = document.getElementById('filterStatus');
+  if (statusEl) statusFilter = statusEl.value;
+  const nurseEl = document.getElementById('filterNurse');
+  if (nurseEl) nurseFilter = nurseEl.value;
   renderRequests();
+}
+
+// Atualiza os contadores individuais nos chips de filtro.
+// Recebe a lista JÁ com os filtros de visibilidade (não-admin) e de dipendente aplicados,
+// mas ANTES do filtro de status (para que cada contador represente o próprio status).
+function updateFilterCounters(scopedList) {
+  try {
+    const counts = { all: 0, pending: 0, approved: 0, rejected: 0 };
+    (scopedList || []).forEach(r => {
+      counts.all++;
+      if (r.status && counts.hasOwnProperty(r.status)) counts[r.status]++;
+    });
+    const set = (id, val) => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = val;
+    };
+    set('allCount', counts.all);
+    set('pendingCount', counts.pending);
+    set('approvedCount', counts.approved);
+    set('rejectedCount', counts.rejected);
+  } catch (e) {
+    console.warn('[updateFilterCounters] erro:', e);
+  }
 }
 
 function renderRequests() {
   const list = document.getElementById('reqList');
 
   let filtered = [...requests];
-  
+
   // Nurse visibility for non-admins
   if (!isAdmin && currentUser) {
     filtered = filtered.filter(r => String(r.nurseId) === String(currentUser.nurseId) || String(r.fromNurseId) === String(currentUser.nurseId));
   }
 
-  // Status filter
-  if (statusFilter !== 'all') {
-    filtered = filtered.filter(r => r.status === statusFilter);
-  }
-
-  // Nurse filter (Admin only)
+  // Nurse filter (Admin only) — aplica ANTES dos contadores para que reflitam a seleção
   if (isAdmin && nurseFilter !== 'all') {
     filtered = filtered.filter(r => String(r.nurseId) === String(nurseFilter) || String(r.fromNurseId) === String(nurseFilter));
+  }
+
+  // Atualiza contadores individuais por status (escopo: usuário logado + filtro de dipendente)
+  updateFilterCounters(filtered);
+
+  // Status filter (aplicado após os contadores para que as contagens não fiquem zeradas quando um status é selecionado)
+  if (statusFilter !== 'all') {
+    filtered = filtered.filter(r => r.status === statusFilter);
   }
 
   if (filtered.length === 0) {
@@ -1311,7 +1625,9 @@ function renderRequests() {
   list.innerHTML = filtered.map((req, idx) => {
     const isPending = req.status === 'pending';
     const canApprove = isAdmin && isPending;
-    const canDelete = isAdmin || (currentUser && currentUser.nurseId === req.nurseId);
+    // Una richiesta può essere eliminata solo se è ancora in attesa (pending).
+    // Dopo l'approvazione o il rifiuto resta nello storico e non è più cancellabile.
+    const canDelete = isPending && (isAdmin || (currentUser && currentUser.nurseId === req.nurseId));
 
     // Date display (requested dates)
     let dateDisplay = '';
@@ -1337,11 +1653,12 @@ function renderRequests() {
     const initials = personName.split(' ').map(w => w[0]).join('').substring(0, 2).toUpperCase();
 
     // Build card sections
-    // Swap partner info
-    const swapHtml = (req.type === 'swap' && req.swapNurseName) ? `
+    // Swap partner info — fallback: nursecambio from Google Sheets
+    const swapPartner = req.swapNurseName || req.nursecambio || req.toNurseName || '';
+    const swapHtml = (req.type === 'swap' && swapPartner) ? `
       <div class="req-card-swap">
         <span class="swap-icon">🔄</span>
-        <span class="swap-text">Cambio con <strong>${req.swapNurseName}</strong></span>
+        <span class="swap-text">Cambio con <strong>${swapPartner}</strong></span>
       </div>` : '';
 
     const descHtml = req.desc ? `
@@ -1473,14 +1790,40 @@ async function submitNewRequest() {
   const endDate = document.getElementById('reqEndDate').value || startDate;
   const desc = document.getElementById('reqDesc').value;
 
+  // Validação obrigatória: tipo da solicitação
+  if (!type) {
+    toast('Seleziona il tipo di richiesta', 'warning');
+    return;
+  }
+
+  // Validação obrigatória: data de início
   if (!startDate) {
     toast('Compila la data', 'warning');
     return;
   }
 
+  // Para tipos com intervalo de datas (ferie/permesso), data fim é obrigatória
+  if (['FE', 'AT'].includes(type)) {
+    const endDateValue = document.getElementById('reqEndDate').value;
+    if (!endDateValue) {
+      toast('Compila la data di fine', 'warning');
+      return;
+    }
+    // Valida que data fim não é anterior à data início
+    if (endDateValue < startDate) {
+      toast('La data di fine non può essere precedente a quella di inizio', 'warning');
+      return;
+    }
+  }
+
   let nurseId, nurseName;
   if (isAdmin) {
     nurseId = document.getElementById('reqNurse').value;
+    // Validação obrigatória para admin: seleção do funcionário
+    if (!nurseId) {
+      toast('Seleziona il personale', 'warning');
+      return;
+    }
     const nurse = nurses.find(n => n.id === nurseId);
     nurseName = nurse ? nurse.name : '';
   } else {
@@ -1498,6 +1841,11 @@ async function submitNewRequest() {
       toast('Seleziona la persona per il cambio', 'warning');
       return;
     }
+    // Evita troca consigo mesmo
+    if (swapNurseId === nurseId) {
+      toast('Non puoi scambiare il turno con te stesso', 'warning');
+      return;
+    }
   }
 
   const req = {
@@ -1506,6 +1854,8 @@ async function submitNewRequest() {
     status: 'pending',
     nurseId,
     nurseName,
+    nursecambio: swapNurseName,
+    nurseIdcambio: swapNurseId,
     startDate,
     endDate: ['FE', 'AT'].includes(type) ? endDate : startDate,
     desc,
@@ -1584,6 +1934,13 @@ async function rejectRequest(id) {
 }
 
 async function deleteRequest(id) {
+  // Difesa in profondità: non si può eliminare una richiesta già approvata o rifiutata.
+  const req = requests.find(r => String(r.id) === String(id));
+  if (!req) { toast('Richiesta non trovata', 'error'); return; }
+  if (req.status !== 'pending') {
+    toast('Non puoi eliminare una richiesta già approvata o rifiutata', 'warning');
+    return;
+  }
   if (!confirm('Sei sicuro di voler eliminare questa richiesta?')) return;
   showLoading(true);
   try {
@@ -1755,6 +2112,246 @@ async function deleteUser() {
     toast("Errore durante l'eliminazione", 'error');
   }
   showLoading(false);
+}
+
+// ── REPORT TAB (NON-ADMIN ONLY) ──────────────────────────────
+let reportMonth = new Date();
+reportMonth.setDate(1);
+
+function changeReportMonth(dir) {
+  reportMonth = new Date(reportMonth.getFullYear(), reportMonth.getMonth() + dir, 1);
+  renderReportTab();
+}
+
+function renderReportTab() {
+  const container = document.getElementById('reportContent');
+  const monthLabel = document.getElementById('reportMonthLabel');
+  if (!container || !monthLabel) return;
+
+  // Only render for non-admin with a linked nurseId
+  if (isAdmin || !currentUser || !currentUser.nurseId) {
+    container.innerHTML = `<div class="empty-state"><div class="empty-icon">📊</div><p>Nessun dato disponibile</p></div>`;
+    return;
+  }
+
+  const nId = currentUser.nurseId;
+  const nurse = nurses.find(n => n.id === nId);
+  if (!nurse) {
+    container.innerHTML = `<div class="empty-state"><div class="empty-icon">📊</div><p>Dipendente non trovato</p></div>`;
+    return;
+  }
+
+  // Update month label
+  const rm = reportMonth.getMonth();
+  const ry = reportMonth.getFullYear();
+  monthLabel.textContent = `${MONTH_NAMES[rm]} ${ry}`;
+
+  // Get ALL raw escala data from cache
+  const rawEscala = (() => {
+    const c = cacheGet('Escala');
+    return (c && Array.isArray(c.data)) ? c.data : [];
+  })();
+
+  // Filter rows for this nurse and the selected report month
+  const myRow = rawEscala.find(r =>
+    String(r.nurseId).trim() === String(nId).trim() &&
+    String(r.month).trim() === String(rm + 1) &&
+    String(r.year).trim() === String(ry)
+  );
+
+  if (!myRow) {
+    container.innerHTML = `<div class="empty-state" style="padding:40px 20px;"><div class="empty-icon">📅</div><p>Nessun turno pubblicato per ${MONTH_NAMES[rm]} ${ry}</p></div>`;
+    return;
+  }
+
+  const daysInMo = new Date(ry, rm + 1, 0).getDate();
+
+  // Calculate metrics for this month
+  let totalH = 0, workDays = 0, restDays = 0, nightCount = 0;
+  let feDays = 0, atDays = 0, festiviWorked = 0;
+  const shiftCounts = {};
+  const activeCodes = ['M1','M2','MF','G','P','PF','N','FE','AT','OFF'];
+
+  for (let d = 1; d <= daysInMo; d++) {
+    const val = String(myRow['d' + d] || '').trim();
+    if (!val || val === 'undefined') continue;
+    const sh = SHIFTS[val];
+    if (!sh) continue;
+
+    totalH += sh.h;
+    shiftCounts[val] = (shiftCounts[val] || 0) + 1;
+
+    if (val === 'OFF') { restDays++; }
+    else if (val === 'FE') { feDays++; restDays++; }
+    else if (val === 'AT') { atDays++; restDays++; }
+    else { workDays++; }
+
+    if (val === 'N') { nightCount++; }
+
+    const dow = new Date(ry, rm, d).getDay();
+    if ((dow === 0 || dow === 6) && !['OFF','FE','AT'].includes(val)) {
+      festiviWorked++;
+    }
+  }
+
+  // Night quota
+  const nightQuota = nurse.nightQuota || 5;
+  const nightPct = nightQuota > 0 ? Math.min((nightCount / nightQuota) * 100, 100).toFixed(0) : '0';
+  const nightColor = nightCount > nightQuota ? '#ef4444' : parseInt(nightPct) >= 90 ? '#fbbf24' : '#8b5cf6';
+
+  // Accumulated metrics (all months)
+  const allMyRows = rawEscala.filter(r => String(r.nurseId).trim() === String(nId).trim());
+  let accH = 0, accWork = 0, accNights = 0, accMonths = 0;
+  const monthlyBreakdown = [];
+
+  allMyRows.forEach(row => {
+    const rowMonth = parseInt(String(row.month || '0').trim());
+    const rowYear = parseInt(String(row.year || '0').trim());
+    if (rowMonth < 1 || rowMonth > 12 || !rowYear) return;
+    const mo = rowMonth - 1;
+    const dimm = new Date(rowYear, mo + 1, 0).getDate();
+    let mH = 0, mW = 0, mN = 0;
+
+    for (let d = 1; d <= dimm; d++) {
+      const v = String(row['d' + d] || '').trim();
+      if (!v || v === 'undefined') continue;
+      const s = SHIFTS[v];
+      if (!s) continue;
+      mH += s.h;
+      if (!['OFF','FE','AT'].includes(v)) mW++;
+      if (v === 'N') mN++;
+    }
+
+    accH += mH; accWork += mW; accNights += mN;
+    accMonths++;
+    monthlyBreakdown.push({
+      month: mo, year: rowYear,
+      label: MONTH_NAMES[mo].substring(0, 3),
+      hours: mH, nights: mN, workDays: mW,
+      isCurrent: mo === rm && rowYear === ry
+    });
+  });
+
+  monthlyBreakdown.sort((a, b) => (a.year * 12 + a.month) - (b.year * 12 + b.month));
+
+  // Pending requests count
+  const pendingReqs = requests.filter(r =>
+    String(r.nurseId) === String(nId) && r.status === 'pending'
+  ).length;
+
+  // Build HTML
+  container.innerHTML = `
+    <!-- KPI Cards -->
+    <div class="rpt-kpi-grid">
+      <div class="rpt-kpi-card rpt-accent-purple">
+        <div class="rpt-kpi-icon">⏱</div>
+        <div class="rpt-kpi-val">${totalH.toFixed(1)}h</div>
+        <div class="rpt-kpi-lbl">Ore Mensili</div>
+      </div>
+      <div class="rpt-kpi-card rpt-accent-blue">
+        <div class="rpt-kpi-icon">📋</div>
+        <div class="rpt-kpi-val">${workDays}</div>
+        <div class="rpt-kpi-lbl">Giorni Lavorati</div>
+      </div>
+      <div class="rpt-kpi-card rpt-accent-green">
+        <div class="rpt-kpi-icon">🛌</div>
+        <div class="rpt-kpi-val">${restDays}</div>
+        <div class="rpt-kpi-lbl">Giorni Riposo</div>
+      </div>
+      <div class="rpt-kpi-card rpt-accent-indigo">
+        <div class="rpt-kpi-icon">🌙</div>
+        <div class="rpt-kpi-val">${nightCount}</div>
+        <div class="rpt-kpi-lbl">Notti</div>
+      </div>
+    </div>
+
+    <!-- Absence & Festival summary -->
+    <div class="rpt-absence-grid">
+      <div class="rpt-absence-card rpt-abs-fe">
+        <div class="rpt-abs-val">${feDays}</div>
+        <div class="rpt-abs-lbl">Ferie</div>
+      </div>
+      <div class="rpt-absence-card rpt-abs-at">
+        <div class="rpt-abs-val">${atDays}</div>
+        <div class="rpt-abs-lbl">Certificati</div>
+      </div>
+      <div class="rpt-absence-card rpt-abs-fest">
+        <div class="rpt-abs-val">${festiviWorked}</div>
+        <div class="rpt-abs-lbl">Festivi Lavorati</div>
+      </div>
+      <div class="rpt-absence-card rpt-abs-pend">
+        <div class="rpt-abs-val">${pendingReqs}</div>
+        <div class="rpt-abs-lbl">Richieste In Attesa</div>
+      </div>
+    </div>
+
+    <!-- Shift Distribution -->
+    <div class="rpt-section">
+      <div class="rpt-section-title">Distribuzione Turni</div>
+      <div class="rpt-shift-grid">
+        ${activeCodes.map(c => {
+          const s = SHIFTS[c];
+          const cnt = shiftCounts[c] || 0;
+          const opacity = cnt > 0 ? '1' : '0.3';
+          return `<div class="rpt-shift-chip" style="background:${s.color}; opacity:${opacity};">
+            <span class="rpt-shift-code" style="color:${s.text}">${c}</span>
+            <span class="rpt-shift-count" style="color:${s.text}">${cnt}</span>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>
+
+    <!-- Night Quota Bar -->
+    <div class="rpt-section">
+      <div class="rpt-bar-header">
+        <span>🌙 Quota Notti del Mese</span>
+        <span style="color:${nightColor}; font-weight:800;">${nightCount}/${nightQuota}</span>
+      </div>
+      <div class="rpt-bar-track">
+        <div class="rpt-bar-fill" style="width:${nightPct}%; background:${nightColor};"></div>
+      </div>
+    </div>
+
+    <!-- Accumulated Overview -->
+    ${accMonths > 0 ? `
+    <div class="rpt-section rpt-acc-section">
+      <div class="rpt-section-title">📈 Riepilogo Accumulato (${accMonths} ${accMonths === 1 ? 'mese' : 'mesi'})</div>
+      <div class="rpt-acc-row">
+        <div class="rpt-acc-item">
+          <span class="rpt-acc-val">${accH.toFixed(0)}h</span>
+          <span class="rpt-acc-lbl">Ore Totali</span>
+        </div>
+        <div class="rpt-acc-item">
+          <span class="rpt-acc-val">${accWork}</span>
+          <span class="rpt-acc-lbl">Giorni Lavorati</span>
+        </div>
+        <div class="rpt-acc-item">
+          <span class="rpt-acc-val">${accNights}</span>
+          <span class="rpt-acc-lbl">Notti Totali</span>
+        </div>
+      </div>
+    </div>` : ''}
+
+    <!-- Monthly Breakdown -->
+    ${monthlyBreakdown.length > 1 ? `
+    <div class="rpt-section">
+      <div class="rpt-section-title">📅 Dettaglio Mensile</div>
+      <div class="rpt-monthly-list">
+        ${monthlyBreakdown.map(md => {
+          const maxH = Math.max(...monthlyBreakdown.map(x => x.hours), 1);
+          const barW = ((md.hours / maxH) * 100).toFixed(0);
+          return `<div class="rpt-monthly-row ${md.isCurrent ? 'rpt-month-active' : ''}">
+            <span class="rpt-monthly-label">${md.label}</span>
+            <div class="rpt-monthly-bar-track">
+              <div class="rpt-monthly-bar-fill" style="width:${barW}%;"></div>
+            </div>
+            <span class="rpt-monthly-val">${md.hours.toFixed(0)}h</span>
+            <span class="rpt-monthly-extra">${md.nights}N</span>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>` : ''}
+  `;
 }
 
 // ── MODALS ────────────────────────────────────────────────────

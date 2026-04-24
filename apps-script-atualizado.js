@@ -270,5 +270,17 @@ function setupHeaders(sheet, headers) {
   var existing = sheet.getDataRange().getValues();
   if (existing.length === 0 || (existing.length === 1 && existing[0].every(function(c) { return c === ""; }))) {
     sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+  } else {
+    // Adiciona colunas faltantes aos headers existentes
+    var currentHeaders = existing[0].map(function(h) { return String(h).trim(); });
+    var added = false;
+    for (var i = 0; i < headers.length; i++) {
+      if (currentHeaders.indexOf(headers[i]) === -1) {
+        var nextCol = currentHeaders.length + 1;
+        sheet.getRange(1, nextCol).setValue(headers[i]);
+        currentHeaders.push(headers[i]);
+        added = true;
+      }
+    }
   }
 }

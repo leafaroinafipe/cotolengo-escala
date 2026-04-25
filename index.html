@@ -34,6 +34,14 @@
 </head>
 <body>
 
+<!-- ═══════════════════ INSTALL TOP BAR (sempre no topo absoluto) ═══════════════════ -->
+<div id="installTopBar" class="install-top-bar" style="display:none;">
+    <span class="install-top-bar-icon">📲</span>
+    <span class="install-top-bar-text">Installa l'app sul tuo dispositivo per un accesso più rapido</span>
+    <button class="install-top-bar-btn" onclick="installApp()">Installa</button>
+    <button class="install-top-bar-close" onclick="dismissInstallTopBar()" aria-label="Chiudi">✕</button>
+</div>
+
 <!-- ═══════════════════ TOAST CONTAINER ═══════════════════ -->
 <div id="toastContainer" class="toast-container"></div>
 
@@ -162,14 +170,6 @@
         <div class="orb orb-2"></div>
     </div>
 
-    <!-- ── INSTALL BANNER (acima do header, some após instalação) ── -->
-    <div id="installTopBar" class="install-top-bar" style="display:none;">
-        <span class="install-top-bar-icon">📲</span>
-        <span class="install-top-bar-text">Installa l'app sul tuo dispositivo per un accesso più rapido</span>
-        <button class="install-top-bar-btn" onclick="installApp()">Installa</button>
-        <button class="install-top-bar-close" onclick="dismissInstallTopBar()" aria-label="Chiudi">✕</button>
-    </div>
-
     <!-- ── TOP HEADER ── -->
     <header class="app-header" id="appHeader">
         <div class="header-left">
@@ -236,9 +236,6 @@
 
                     <!-- Shift Legend -->
                     <div class="shift-legend" id="shiftLegend"></div>
-
-                    <!-- Personal Metrics Panel (nurses only) -->
-                    <div id="nurseMetricsPanel" class="nurse-metrics-panel" style="display:none;"></div>
                 </div>
             </div>
 
@@ -402,9 +399,18 @@
                 <label>Dipendente</label>
                 <select id="reqNurse" class="form-select"></select>
             </div>
+            <!-- Hint cross-date (solo swap) -->
+            <div id="reqSwapHint" style="display:none; background:rgba(59,130,246,0.08); border:1px solid rgba(59,130,246,0.25); border-radius:10px; padding:10px 12px; margin-bottom:10px; font-size:12px; color:var(--text-2, #cbd5e1); line-height:1.45;">
+                💡 <b>Cambio incrociato:</b> le due date possono essere diverse.
+            </div>
             <div class="form-field">
                 <label id="reqDateLabel">Data Inizio</label>
                 <input type="date" id="reqStartDate" class="form-input" onchange="onReqDateChange()">
+            </div>
+            <!-- Solo swap: turno del richiedente alla data scelta -->
+            <div class="form-field" id="reqFromShiftField" style="display:none">
+                <label>Il tuo turno in questa data</label>
+                <input type="text" id="reqFromShiftDisplay" class="form-input" readonly>
             </div>
             <div class="form-field" id="reqEndField">
                 <label>Data Fine</label>
@@ -412,7 +418,17 @@
             </div>
             <div class="form-field" id="reqSwapField" style="display:none">
                 <label>Cambia con</label>
-                <select id="reqSwapNurse" class="form-select"></select>
+                <select id="reqSwapNurse" class="form-select" onchange="onReqSwapNurseChange()"></select>
+            </div>
+            <!-- Solo swap: data della controparte (cross-date) -->
+            <div class="form-field" id="reqSwapDateField" style="display:none">
+                <label>Data della controparte</label>
+                <input type="date" id="reqSwapDate" class="form-input" onchange="onReqSwapDateChange()">
+            </div>
+            <!-- Solo swap: turno della controparte nella sua data -->
+            <div class="form-field" id="reqToShiftField" style="display:none">
+                <label>Il suo turno nella data</label>
+                <input type="text" id="reqToShiftDisplay" class="form-input" readonly>
             </div>
             <div class="form-field">
                 <label>Note (opzionale)</label>

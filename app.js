@@ -110,6 +110,7 @@ let totalPages = 2; // 2 for users, 3 for admin
 let statusFilter = 'all';
 let nurseFilter = 'all';
 let calNurseFilter = 'all'; // filtro de funcionário no calendário (admin)
+let editingRequestId = null; // ID della richiesta in modifica (null = nuova richiesta)
 
 // ── HELPERS: Normalizar dados do Sheet ───────────────────────
 // O Sheet usa colunas ID_Funcionario / Nome, mas o app interno usa id / name
@@ -195,19 +196,11 @@ function updateInstallUI() {
     hideAllInstallUI();
     return;
   }
-  if (installPromptReady && deferredPrompt) {
-    showInstallButtons();
-    showLoginBanner();
-    showInstallTopBar();
-    return;
-  }
-  if (isIOS) {
-    showInstallButtons();
-    showLoginBanner();
-    showInstallTopBar();
-    return;
-  }
-  hideAllInstallUI();
+  // Mostra SEMPRE para iOS (Safari não dispara beforeinstallprompt) e Android.
+  // Em desktop também mostra como fallback (alguns browsers desktop suportam PWA).
+  showInstallButtons();
+  showLoginBanner();
+  showInstallTopBar();
 }
 
 function showInstallButtons() {
@@ -217,11 +210,15 @@ function showInstallButtons() {
   if (loginBtn) loginBtn.style.display = 'flex';
 }
 
-// Mostra a barra superior de instalação (acima do header), a menos que o usuário já a tenha dispensado.
+// Mostra a barra superior de instalação. Usa _v3 para invalidar dismissals antigos.
 function showInstallTopBar() {
+  // Limpa flags antigas (v1) automaticamente para usuários existentes
+  try { localStorage.removeItem('install_topbar_dismissed'); } catch (e) {}
+  try { localStorage.removeItem('install_topbar_dismissed_v2'); } catch (e) {}
+
   let dismissed = false;
   try {
-    dismissed = localStorage.getItem('install_topbar_dismissed') === 'true';
+    dismissed = localStorage.getItem('install_topbar_dismissed_v3') === 'true';
   } catch (e) {}
   if (dismissed) return;
   const bar = document.getElementById('installTopBar');
@@ -229,18 +226,21 @@ function showInstallTopBar() {
 }
 
 function dismissInstallTopBar() {
-  try { localStorage.setItem('install_topbar_dismissed', 'true'); } catch (e) {}
+  try { localStorage.setItem('install_topbar_dismissed_v3', 'true'); } catch (e) {}
   const bar = document.getElementById('installTopBar');
   if (bar) bar.style.display = 'none';
 }
 
 function showLoginBanner() {
+  // Limpa flags antigas
+  try { localStorage.removeItem('install_banner_dismissed'); } catch (e) {}
+
   let dismissed = false;
   try {
-    dismissed = localStorage.getItem('install_banner_dismissed') === 'true';
+    dismissed = localStorage.getItem('install_banner_dismissed_v3') === 'true';
   } catch (e) {}
   if (dismissed) return;
-  
+
   const banner = document.getElementById('loginInstallBanner');
   if (banner) {
     setTimeout(() => banner.classList.add('visible'), 800);
@@ -259,7 +259,7 @@ function hideAllInstallUI() {
 }
 
 function dismissInstallBanner() {
-  try { localStorage.setItem('install_banner_dismissed', 'true'); } catch (e) {}
+  try { localStorage.setItem('install_banner_dismissed_v3', 'true'); } catch (e) {}
   const banner = document.getElementById('loginInstallBanner');
   if (banner) banner.classList.remove('visible');
 }
@@ -269,7 +269,8 @@ function installApp() {
     toast('App già installata!', 'info');
     return;
   }
-  if (deferredPrompt) {
+  // Android Chrome: prompt nativo se disponível
+  if (deferredPrompt && !isIOS) {
     deferredPrompt.prompt();
     deferredPrompt.userChoice.then((choiceResult) => {
       if (choiceResult.outcome === 'accepted') {
@@ -280,12 +281,24 @@ function installApp() {
     });
     return;
   }
+  // iOS sempre + Android sem prompt nativo: abre modal com instruções manuais.
+  // O modal contém seções específicas para iOS e Android — ajusto a visibilidade aqui.
   const modal = document.getElementById('pwaInstallModal');
-  if (modal) modal.classList.remove('hidden');
+  if (modal) {
+    const iosSection = document.getElementById('installIOS');
+    const androidSection = document.getElementById('installAndroid');
+    if (iosSection)     iosSection.style.display     = isIOS ? 'block' : (isAndroid ? 'none' : 'block');
+    if (androidSection) androidSection.style.display = isAndroid ? 'block' : (isIOS ? 'none' : 'block');
+    modal.classList.remove('hidden');
+  }
 }
 
 function initInstallUI() {
+  // Mostra imediatamente (não espera 1.5s)
+  updateInstallUI();
+  // E re-verifica após o app carregar, para o caso de o beforeinstallprompt chegar tarde
   setTimeout(() => updateInstallUI(), 1500);
+  setTimeout(() => updateInstallUI(), 4000);
 }
 
 function togglePassword() {
@@ -1012,187 +1025,17 @@ function hydrateFromCache() {
   return hasData;
 }
 
-// ── NURSE PERSONAL METRICS (non-admin only) ─────────────────
+// ── NURSE PERSONAL METRICS ─────────────────────────────────
+// NOTE: I KPI personali sono stati rimossi dalla guida Scala.
+// Tutti gli indicatori sono ora centralizzati nella guida Report
+// (vedi renderReportTab). Questa funzione è mantenuta come no-op
+// per non rompere eventuali chiamate residue.
 function renderNurseMetrics() {
-  const panel = document.getElementById('nurseMetricsPanel');
-  if (!panel) return;
-
-  // Only show for nurses (non-admin) with a linked nurseId
-  if (isAdmin || !currentUser || !currentUser.nurseId) {
-    panel.style.display = 'none';
-    return;
-  }
-
-  const nId = currentUser.nurseId;
-  const nurse = nurses.find(n => n.id === nId);
-  if (!nurse) { panel.style.display = 'none'; return; }
-
-  // ── Get ALL raw escala data from cache to compute accumulated metrics ──
-  const rawEscala = (() => {
-    const c = cacheGet('Escala');
-    return (c && Array.isArray(c.data)) ? c.data : [];
-  })();
-
-  // Filter rows for this nurse only
-  const myRows = rawEscala.filter(r => String(r.nurseId).trim() === String(nId).trim());
-  if (myRows.length === 0) { panel.style.display = 'none'; return; }
-
-  // ── Compute ACCUMULATED metrics across all months ──
-  let accH = 0, accWork = 0, accRest = 0, accNights = 0;
-  let accFE = 0, accAT = 0, accFestivi = 0;
-  const accShiftCounts = {};
-  const monthlyData = []; // { month, year, label, hours, nights, workDays }
-
-  myRows.forEach(row => {
-    const rowMonth = parseInt(String(row.month || '0').trim());
-    const rowYear = parseInt(String(row.year || '0').trim());
-    if (rowMonth < 1 || rowMonth > 12 || !rowYear) return;
-    const mo = rowMonth - 1; // JS 0-indexed
-    const daysInMo = new Date(rowYear, mo + 1, 0).getDate();
-
-    let moH = 0, moWork = 0, moNights = 0;
-
-    for (let d = 1; d <= daysInMo; d++) {
-      const val = String(row['d' + d] || '').trim();
-      if (!val || val === 'undefined') continue;
-      const sh = SHIFTS[val];
-      if (!sh) continue;
-
-      accH += sh.h;
-      moH += sh.h;
-      accShiftCounts[val] = (accShiftCounts[val] || 0) + 1;
-
-      if (val === 'OFF') { accRest++; }
-      else if (val === 'FE') { accFE++; accRest++; }
-      else if (val === 'AT') { accAT++; accRest++; }
-      else { accWork++; moWork++; }
-
-      if (val === 'N') { accNights++; moNights++; }
-
-      const dow = new Date(rowYear, mo, d).getDay();
-      if ((dow === 0 || dow === 6) && !['OFF','FE','AT'].includes(val)) {
-        accFestivi++;
-      }
-    }
-
-    monthlyData.push({
-      month: mo, year: rowYear,
-      label: MONTH_NAMES[mo].substring(0, 3),
-      hours: moH, nights: moNights, workDays: moWork
-    });
-  });
-
-  // Sort monthly data chronologically
-  monthlyData.sort((a, b) => (a.year * 12 + a.month) - (b.year * 12 + b.month));
-
-  // ── Absence requests for this nurse ──
-  const myRequests = requests.filter(r =>
-    String(r.nurseId) === String(nId) && r.status === 'approved'
-  );
-  const pendingRequests = requests.filter(r =>
-    String(r.nurseId) === String(nId) && r.status === 'pending'
-  );
-
-  // Determine totals
-  const totalMonths = monthlyData.length;
-  const nightQuota = nurse.nightQuota || 5;
-  const accNightQuota = nightQuota * totalMonths;
-  const accNightPct = accNightQuota > 0 ? Math.min((accNights / accNightQuota) * 100, 100).toFixed(0) : '0';
-  const nightColor = accNights > accNightQuota ? '#ef4444' : parseInt(accNightPct) >= 90 ? '#fbbf24' : '#8b5cf6';
-
-  const activeCodes = ['M1','M2','MF','G','P','PF','N','FE','AT','OFF'];
-
-  panel.style.display = 'block';
-  panel.innerHTML = `
-    <div class="nmp-header">
-      <span style="font-size:18px;">📊</span>
-      <h3>Le Mie Metriche</h3>
-      <span style="margin-left:auto; font-size:11px; color:var(--text-3); font-weight:600;">Accumulato ${totalMonths} ${totalMonths === 1 ? 'mese' : 'mesi'}</span>
-    </div>
-
-    <!-- KPI summary — accumulated -->
-    <div class="nmp-kpi-row">
-      <div class="nmp-kpi accent-purple">
-        <div class="nmp-kpi-val">${accH.toFixed(1)}h</div>
-        <div class="nmp-kpi-lbl">Ore Totali</div>
-      </div>
-      <div class="nmp-kpi accent-blue">
-        <div class="nmp-kpi-val">${accWork}</div>
-        <div class="nmp-kpi-lbl">Giorni Lavorati</div>
-      </div>
-      <div class="nmp-kpi accent-green">
-        <div class="nmp-kpi-val">${accNights}</div>
-        <div class="nmp-kpi-lbl">Notti Totali</div>
-      </div>
-      <div class="nmp-kpi accent-amber">
-        <div class="nmp-kpi-val">${accFestivi}</div>
-        <div class="nmp-kpi-lbl">Festivi Lavorati</div>
-      </div>
-    </div>
-
-    <!-- Absence summary -->
-    <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px; margin-bottom:10px;">
-      <div style="background:rgba(16,185,129,0.1); border:1px solid rgba(16,185,129,0.2); border-radius:10px; padding:10px 6px; text-align:center;">
-        <div style="font-size:20px; font-weight:900; color:#34d399;">${accFE}</div>
-        <div style="font-size:9px; color:var(--text-3); font-weight:700; text-transform:uppercase; margin-top:2px;">Ferie</div>
-      </div>
-      <div style="background:rgba(239,68,68,0.1); border:1px solid rgba(239,68,68,0.2); border-radius:10px; padding:10px 6px; text-align:center;">
-        <div style="font-size:20px; font-weight:900; color:#f87171;">${accAT}</div>
-        <div style="font-size:9px; color:var(--text-3); font-weight:700; text-transform:uppercase; margin-top:2px;">Certificati</div>
-      </div>
-      <div style="background:rgba(245,158,11,0.1); border:1px solid rgba(245,158,11,0.2); border-radius:10px; padding:10px 6px; text-align:center;">
-        <div style="font-size:20px; font-weight:900; color:#fbbf24;">${pendingRequests.length}</div>
-        <div style="font-size:9px; color:var(--text-3); font-weight:700; text-transform:uppercase; margin-top:2px;">In Attesa</div>
-      </div>
-    </div>
-
-    <!-- Shift distribution chips -->
-    <div class="nmp-shifts-grid">
-      ${activeCodes.map(c => {
-        const s = SHIFTS[c];
-        const cnt = accShiftCounts[c] || 0;
-        const opacity = cnt > 0 ? '1' : '0.35';
-        return `<div class="nmp-shift-chip" style="background:${s.color}; opacity:${opacity};">
-          <span class="nmp-shift-code" style="color:${s.text}">${c}</span>
-          <span class="nmp-shift-count" style="color:${s.text}">${cnt}</span>
-        </div>`;
-      }).join('')}
-    </div>
-
-    <!-- Night quota bar (accumulated) -->
-    <div class="nmp-bar-wrap" style="margin-bottom:10px;">
-      <div class="nmp-bar-label">
-        <span>🌙 Notti Accumulate</span>
-        <span style="color:${nightColor}">${accNights}/${accNightQuota}</span>
-      </div>
-      <div class="nmp-bar-track">
-        <div class="nmp-bar-fill" style="width:${accNightPct}%; background:${nightColor};"></div>
-      </div>
-    </div>
-
-    <!-- Monthly breakdown mini-table -->
-    ${monthlyData.length > 1 ? `
-    <div class="nmp-bar-wrap">
-      <div style="font-size:11px; font-weight:700; color:var(--text-2); margin-bottom:8px;">📅 Dettaglio Mensile</div>
-      <div style="display:grid; gap:6px;">
-        ${monthlyData.map(md => {
-          const barW = accH > 0 ? ((md.hours / accH) * 100).toFixed(0) : 0;
-          return `<div style="display:flex; align-items:center; gap:8px;">
-            <span style="min-width:34px; font-size:11px; font-weight:700; color:var(--text-3);">${md.label}</span>
-            <div style="flex:1; height:6px; background:rgba(255,255,255,0.06); border-radius:99px; overflow:hidden;">
-              <div style="width:${barW}%; height:100%; background:var(--primary); border-radius:99px;"></div>
-            </div>
-            <span style="min-width:44px; text-align:right; font-size:11px; font-weight:700; color:var(--text-2);">${md.hours.toFixed(0)}h</span>
-          </div>`;
-        }).join('')}
-      </div>
-    </div>` : ''}
-  `;
+  return;
 }
 
 function renderAll() {
   renderCalendar();
-  renderNurseMetrics();
   renderRequests();
   populateFilterNurse();
   populateCalendarFilter();
@@ -1347,7 +1190,7 @@ function buildLegend() {
 function changeMonth(dir) {
   currentMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + dir, 1);
   updateMonthDisplay();
-  loadSchedule().then(() => { renderCalendar(); renderNurseMetrics(); });
+  loadSchedule().then(() => { renderCalendar(); });
 }
 
 function updateMonthDisplay() {
@@ -1631,7 +1474,18 @@ function renderRequests() {
 
     // Date display (requested dates)
     let dateDisplay = '';
-    if (req.startDate) {
+    if (req.type === 'swap') {
+      // Per swap cross-date mostra le due date; single-date mostra quella unica
+      const fromRaw = req.dataRichiedente || req.startDate || '';
+      const toRaw   = req.dataCambio      || req.startDate || '';
+      const from    = fromRaw ? formatDate(fromRaw) : '';
+      const to      = toRaw   ? formatDate(toRaw)   : '';
+      if (from && to && from !== to) {
+        dateDisplay = `${from} ↔ ${to}`;
+      } else {
+        dateDisplay = from || to;
+      }
+    } else if (req.startDate) {
       const start = formatDate(req.startDate);
       const end = req.endDate ? formatDate(req.endDate) : start;
       dateDisplay = start === end ? start : `${start} → ${end}`;
@@ -1655,11 +1509,39 @@ function renderRequests() {
     // Build card sections
     // Swap partner info — fallback: nursecambio from Google Sheets
     const swapPartner = req.swapNurseName || req.nursecambio || req.toNurseName || '';
-    const swapHtml = (req.type === 'swap' && swapPartner) ? `
+    let swapHtml = '';
+    if (req.type === 'swap' && swapPartner) {
+      swapHtml = `
       <div class="req-card-swap">
         <span class="swap-icon">🔄</span>
         <span class="swap-text">Cambio con <strong>${swapPartner}</strong></span>
-      </div>` : '';
+      </div>`;
+      // Cross-date: mostra riga di dettaglio con turni (cede / riceve)
+      const fromRaw = req.dataRichiedente || req.startDate || '';
+      const toRaw   = req.dataCambio      || req.startDate || '';
+      const isCross = fromRaw && toRaw && fromRaw !== toRaw;
+      const fromShiftCode = req.turnoRichiedente || req.fromShift || '';
+      const toShiftCode   = req.turnoCambio      || req.toShift   || '';
+      const fromShiftName = SHIFTS[fromShiftCode]?.name || fromShiftCode || '';
+      const toShiftName   = SHIFTS[toShiftCode]?.name   || toShiftCode   || '';
+      if (isCross) {
+        swapHtml += `
+      <div class="req-card-swap" style="margin-top:6px;">
+        <span class="swap-icon">📤</span>
+        <span class="swap-text">Cede <strong>${formatDate(fromRaw)}</strong>${fromShiftName ? ' — ' + fromShiftName : ''}</span>
+      </div>
+      <div class="req-card-swap" style="margin-top:4px;">
+        <span class="swap-icon">📥</span>
+        <span class="swap-text">Riceve <strong>${formatDate(toRaw)}</strong>${toShiftName ? ' — ' + toShiftName : ''}</span>
+      </div>`;
+      } else if (fromShiftName && toShiftName) {
+        swapHtml += `
+      <div class="req-card-swap" style="margin-top:6px;">
+        <span class="swap-icon">🔃</span>
+        <span class="swap-text">${fromShiftName} ➔ ${toShiftName}</span>
+      </div>`;
+      }
+    }
 
     const descHtml = req.desc ? `
       <div class="req-card-desc">
@@ -1674,9 +1556,15 @@ function renderRequests() {
       </div>` : '';
 
     // Action buttons
+    // "Modifica" è consentita con gli stessi permessi di eliminazione
+    // (solo se la richiesta è ancora in attesa e l'utente è admin o il proprietario).
+    const canEdit = canDelete;
     let actionsHtml = '';
-    if (canApprove || canDelete) {
+    if (canApprove || canDelete || canEdit) {
       let btns = '';
+      if (canEdit) {
+        btns += `<button class="req-action-btn btn-edit-new" onclick="editRequest('${req.id}')">✏️ Modifica</button>`;
+      }
       if (canDelete) {
         btns += `<button class="req-action-btn btn-delete-new" onclick="deleteRequest('${req.id}')">🗑️ Elimina</button>`;
       }
@@ -1725,7 +1613,22 @@ function formatDate(dateStr) {
 }
 
 // ── NEW REQUEST ───────────────────────────────────────────────
-function openNewRequestModal() {
+function openNewRequestModal(reqToEdit = null) {
+  // Imposta stato globale: se reqToEdit è presente siamo in modalità modifica
+  editingRequestId = reqToEdit ? reqToEdit.id : null;
+
+  // Aggiorna il titolo della modale in funzione della modalità
+  const modalTitle = document.querySelector('#newReqModal .modal-header h3, #newReqModal .modal-title');
+  if (modalTitle) {
+    modalTitle.textContent = editingRequestId ? 'Modifica Richiesta' : 'Nuova Richiesta';
+  }
+
+  // Aggiorna il testo del pulsante di submit (se esiste)
+  const submitBtn = document.querySelector('#newReqModal button[onclick="submitNewRequest()"]');
+  if (submitBtn) {
+    submitBtn.textContent = editingRequestId ? 'Salva Modifiche' : 'Invia';
+  }
+
   // Show nurse field only for admin
   document.getElementById('reqNurseField').style.display = isAdmin ? 'block' : 'none';
 
@@ -1735,14 +1638,59 @@ function openNewRequestModal() {
   document.getElementById('reqNurse').innerHTML = nurseOptions;
   document.getElementById('reqSwapNurse').innerHTML = nurseOptions;
 
-  // Reset form
-  document.getElementById('reqType').value = 'FE';
-  document.getElementById('reqStartDate').value = '';
-  document.getElementById('reqEndDate').value = '';
-  document.getElementById('reqDesc').value = '';
-  onReqTypeChange();
+  if (reqToEdit) {
+    // Popola il form con i dati della richiesta esistente
+    document.getElementById('reqType').value = reqToEdit.type || 'FE';
+    // Per swap cross-date: la "data principale" è dataRichiedente; fallback a startDate
+    const primaryDate = reqToEdit.type === 'swap'
+      ? (reqToEdit.dataRichiedente || reqToEdit.startDate || '')
+      : (reqToEdit.startDate || '');
+    document.getElementById('reqStartDate').value = primaryDate ? String(primaryDate).split('T')[0] : '';
+    document.getElementById('reqEndDate').value = reqToEdit.endDate ? String(reqToEdit.endDate).split('T')[0] : '';
+    document.getElementById('reqDesc').value = reqToEdit.desc || '';
+    if (isAdmin && reqToEdit.nurseId) {
+      document.getElementById('reqNurse').value = reqToEdit.nurseId;
+    }
+    onReqTypeChange();
+    if (reqToEdit.type === 'swap') {
+      const swapId = reqToEdit.swapNurseId || reqToEdit.nurseIdcambio || '';
+      if (swapId) document.getElementById('reqSwapNurse').value = swapId;
+      // Restaura data della controparte (cross-date)
+      const cpDate = reqToEdit.dataCambio || reqToEdit.startDate || '';
+      document.getElementById('reqSwapDate').value = cpDate ? String(cpDate).split('T')[0] : '';
+      // Aggiorna i display dei turni
+      refreshSwapShiftDisplays();
+    }
+  } else {
+    // Reset form
+    document.getElementById('reqType').value = 'FE';
+    document.getElementById('reqStartDate').value = '';
+    document.getElementById('reqEndDate').value = '';
+    document.getElementById('reqDesc').value = '';
+    const sd = document.getElementById('reqSwapDate');         if (sd) sd.value = '';
+    const fs = document.getElementById('reqFromShiftDisplay'); if (fs) fs.value = '';
+    const ts = document.getElementById('reqToShiftDisplay');   if (ts) ts.value = '';
+    onReqTypeChange();
+  }
 
   openModal('newReqModal');
+}
+
+// Wrapper: apre la modale in modalità modifica per la richiesta indicata
+function editRequest(id) {
+  const req = requests.find(r => String(r.id) === String(id));
+  if (!req) { toast('Richiesta non trovata', 'error'); return; }
+  if (req.status !== 'pending') {
+    toast('Puoi modificare solo richieste ancora in attesa', 'warning');
+    return;
+  }
+  // Verifica permessi (stessa logica del canDelete)
+  const allowed = isAdmin || (currentUser && currentUser.nurseId === req.nurseId);
+  if (!allowed) {
+    toast('Non hai i permessi per modificare questa richiesta', 'warning');
+    return;
+  }
+  openNewRequestModal(req);
 }
 
 function onReqTypeChange() {
@@ -1752,15 +1700,83 @@ function onReqTypeChange() {
 
   document.getElementById('reqEndField').style.display = isRange ? 'block' : 'none';
   document.getElementById('reqSwapField').style.display = isSwap ? 'block' : 'none';
-  document.getElementById('reqDateLabel').textContent = isRange ? 'Data Inizio' : 'Data';
+  // Campi cross-date (solo swap)
+  document.getElementById('reqSwapHint').style.display      = isSwap ? 'block' : 'none';
+  document.getElementById('reqFromShiftField').style.display = isSwap ? 'block' : 'none';
+  document.getElementById('reqSwapDateField').style.display  = isSwap ? 'block' : 'none';
+  document.getElementById('reqToShiftField').style.display   = isSwap ? 'block' : 'none';
+
+  // Label della data principale: per swap è "La tua data (turno che cederai)"
+  document.getElementById('reqDateLabel').textContent = isSwap
+    ? 'La tua data (turno che cederai)'
+    : (isRange ? 'Data Inizio' : 'Data');
+
+  // Reset display fields quando si cambia tipo
+  if (!isSwap) {
+    const fs = document.getElementById('reqFromShiftDisplay'); if (fs) fs.value = '';
+    const ts = document.getElementById('reqToShiftDisplay');   if (ts) ts.value = '';
+    const sd = document.getElementById('reqSwapDate');         if (sd) sd.value = '';
+  }
 
   // Atualiza dropdown de enfermeiras de swap quando muda tipo
-  if (isSwap) updateSwapNurseOptions();
+  if (isSwap) {
+    updateSwapNurseOptions();
+    refreshSwapShiftDisplays();
+  }
 }
 
 function onReqDateChange() {
   const type = document.getElementById('reqType').value;
-  if (type === 'swap') updateSwapNurseOptions();
+  if (type === 'swap') {
+    updateSwapNurseOptions();
+    refreshSwapShiftDisplays();
+  }
+}
+
+function onReqSwapNurseChange() { refreshSwapShiftDisplays(); }
+function onReqSwapDateChange()  { refreshSwapShiftDisplays(); }
+
+// Helper: recupera il turno di un'infermiera su una data ISO arbitraria
+function getShiftForDateMobile(nurseId, isoDate) {
+  if (!nurseId || !isoDate) return '';
+  const parts = String(isoDate).split('-');
+  if (parts.length !== 3) return '';
+  const y = parseInt(parts[0], 10);
+  const m = parseInt(parts[1], 10) - 1;
+  const d = parseInt(parts[2], 10);
+  if (isNaN(y) || isNaN(m) || isNaN(d)) return '';
+  return schedule[`${nurseId}_${m}_${y}_${d}`] || '';
+}
+
+// Popola i campi readonly dei turni (richiedente e controparte) in base alle date/nurse
+function refreshSwapShiftDisplays() {
+  const startDate = document.getElementById('reqStartDate').value;
+  const swapDate  = document.getElementById('reqSwapDate').value;
+
+  // Risolve il richiedente (admin: dropdown reqNurse; altrimenti currentUser)
+  let requesterId = '';
+  if (isAdmin) {
+    requesterId = document.getElementById('reqNurse').value;
+  } else if (currentUser) {
+    requesterId = currentUser.nurseId;
+  }
+  const swapNurseId = document.getElementById('reqSwapNurse').value;
+
+  const fromShiftCode = getShiftForDateMobile(requesterId, startDate);
+  const toShiftCode   = getShiftForDateMobile(swapNurseId, swapDate);
+
+  const fromEl = document.getElementById('reqFromShiftDisplay');
+  const toEl   = document.getElementById('reqToShiftDisplay');
+  if (fromEl) {
+    fromEl.value = fromShiftCode
+      ? `${fromShiftCode} — ${SHIFTS[fromShiftCode]?.name || fromShiftCode}`
+      : '';
+  }
+  if (toEl) {
+    toEl.value = toShiftCode
+      ? `${toShiftCode} — ${SHIFTS[toShiftCode]?.name || toShiftCode}`
+      : '';
+  }
 }
 
 function updateSwapNurseOptions() {
@@ -1833,6 +1849,8 @@ async function submitNewRequest() {
 
   // Captura dados da enfermeira de troca (swap)
   let swapNurseId = '', swapNurseName = '';
+  // Cross-date swap fields
+  let dataRichiedente = '', dataCambio = '', turnoRichiedente = '', turnoCambio = '';
   if (type === 'swap') {
     swapNurseId = document.getElementById('reqSwapNurse').value;
     const swapNurse = nurses.find(n => n.id === swapNurseId);
@@ -1846,6 +1864,91 @@ async function submitNewRequest() {
       toast('Non puoi scambiare il turno con te stesso', 'warning');
       return;
     }
+
+    // Data della controparte (cross-date)
+    const swapDateValue = document.getElementById('reqSwapDate').value;
+    if (!swapDateValue) {
+      toast('Compila la data della controparte', 'warning');
+      return;
+    }
+    // Stesso mese/anno della data del richiedente (coerenza temporale)
+    const dA = new Date(startDate + 'T00:00:00');
+    const dB = new Date(swapDateValue + 'T00:00:00');
+    if (dA.getFullYear() !== dB.getFullYear() || dA.getMonth() !== dB.getMonth()) {
+      toast('Le due date devono essere nello stesso mese', 'warning');
+      return;
+    }
+
+    dataRichiedente = startDate;
+    dataCambio = swapDateValue;
+    turnoRichiedente = getShiftForDateMobile(nurseId, dataRichiedente) || '';
+    turnoCambio      = getShiftForDateMobile(swapNurseId, dataCambio) || '';
+
+    // Defense-in-depth: entrambi devono avere un turno in quelle date
+    if (!turnoRichiedente) {
+      toast('Non hai un turno assegnato in questa data', 'warning');
+      return;
+    }
+    if (!turnoCambio) {
+      toast('La controparte non ha un turno assegnato in questa data', 'warning');
+      return;
+    }
+    // Se stessa data e stesso turno, nulla da scambiare
+    if (dataRichiedente === dataCambio && turnoRichiedente === turnoCambio) {
+      toast('I turni sono uguali, nulla da scambiare', 'warning');
+      return;
+    }
+  }
+
+  // Se siamo in modalità modifica aggiorniamo la richiesta esistente,
+  // altrimenti creiamo una nuova richiesta in stato "pending".
+  if (editingRequestId) {
+    const existing = requests.find(r => String(r.id) === String(editingRequestId));
+    if (!existing) {
+      toast('Richiesta non trovata', 'error');
+      editingRequestId = null;
+      return;
+    }
+    if (existing.status !== 'pending') {
+      toast('Puoi modificare solo richieste ancora in attesa', 'warning');
+      editingRequestId = null;
+      return;
+    }
+
+    const updates = {
+      type,
+      nurseId,
+      nurseName,
+      nursecambio: swapNurseName,
+      nurseIdcambio: swapNurseId,
+      startDate,
+      endDate: ['FE', 'AT'].includes(type) ? endDate : startDate,
+      desc,
+      swapNurseId,
+      swapNurseName,
+      // Cross-date swap fields (vazios per tipi diversi da swap)
+      dataRichiedente,
+      dataCambio,
+      turnoRichiedente,
+      turnoCambio
+    };
+
+    showLoading(true);
+    try {
+      await apiUpdate('Solicitacoes', 'id', editingRequestId, updates);
+      Object.assign(existing, updates);
+      cacheSet('Solicitacoes', requests);
+      renderRequests();
+      updateBadges();
+      closeModal('newReqModal');
+      toast('Richiesta aggiornata!', 'success');
+    } catch (e) {
+      console.error('❌ submitNewRequest (edit):', e.message);
+      toast("Errore durante l'aggiornamento della richiesta", 'error');
+    }
+    editingRequestId = null;
+    showLoading(false);
+    return;
   }
 
   const req = {
@@ -1861,6 +1964,11 @@ async function submitNewRequest() {
     desc,
     swapNurseId,
     swapNurseName,
+    // Cross-date swap fields
+    dataRichiedente,
+    dataCambio,
+    turnoRichiedente,
+    turnoCambio,
     createdAt: new Date().toISOString(),
     approvedAt: '',
     approvedBy: ''
@@ -1882,25 +1990,153 @@ async function submitNewRequest() {
   showLoading(false);
 }
 
+// ── APPLY APPROVED SWAP ENGINE ────────────────────────────────
+// Aplica imediatamente a troca de turno aprovada na sheet Escala.
+// Suporta swap mesmo dia (2 células) e cross-date (4 células simétricas).
+// Idempotente: usa snapshot turnoRichiedente/turnoCambio para detectar reaplicação.
+async function applyApprovedSwapMobile(req) {
+  if (!req || req.type !== 'swap') return { applied: false, reason: 'not-swap' };
+  if (req.autoApplied === true)    return { applied: false, reason: 'already-applied' };
+
+  const nurseId     = String(req.nurseId || req.fromNurseId || '').trim();
+  const swapNurseId = String(req.nurseIdcambio || req.swapNurseId || req.toNurseId || '').trim();
+  if (!nurseId || !swapNurseId) return { applied: false, reason: 'missing-nurses' };
+
+  const fromDateStr = String(req.dataRichiedente || req.startDate || req.date || '').slice(0, 10);
+  const toDateStr   = String(req.dataCambio      || req.startDate || req.date || '').slice(0, 10);
+  if (!fromDateStr || !toDateStr) return { applied: false, reason: 'missing-dates' };
+
+  const fromDate = new Date(fromDateStr + 'T00:00:00');
+  const toDate   = new Date(toDateStr   + 'T00:00:00');
+  const m = fromDate.getMonth();
+  const y = fromDate.getFullYear();
+  if (toDate.getMonth() !== m || toDate.getFullYear() !== y) {
+    return { applied: false, reason: 'cross-month-not-supported' };
+  }
+  const fromDay = fromDate.getDate();
+  const toDay   = toDate.getDate();
+
+  // Lê rows frescos do cloud para garantir consistência
+  let escalaData;
+  try {
+    escalaData = await apiRead('Escala');
+  } catch (e) {
+    console.warn('[APPLY-SWAP] apiRead Escala falhou, uso cache:', e.message);
+    const cached = cacheGet('Escala');
+    escalaData = cached && Array.isArray(cached.data) ? cached.data : null;
+  }
+  if (!Array.isArray(escalaData)) return { applied: false, reason: 'no-escala-data' };
+
+  const targetMonth = String(m + 1);
+  const targetYear  = String(y);
+  const monthRows = escalaData.filter(r =>
+    String(r.month) === targetMonth && String(r.year) === targetYear
+  );
+  const reqRow = monthRows.find(r => String(r.nurseId) === nurseId);
+  const cpRow  = monthRows.find(r => String(r.nurseId) === swapNurseId);
+  if (!reqRow || !cpRow) return { applied: false, reason: 'nurse-row-not-found' };
+
+  const cellVal = (row, day) => String(row['d' + day] || '').trim();
+
+  if (fromDay === toDay) {
+    // Swap legacy mesmo dia (2 células)
+    const a = cellVal(reqRow, fromDay);
+    const b = cellVal(cpRow,  fromDay);
+    if (a === b) return { applied: true, reason: 'noop-equal-shifts' };
+    if (!a || !b) return { applied: false, reason: 'missing-shift-cell' };
+    reqRow['d' + fromDay] = b;
+    cpRow['d'  + fromDay] = a;
+  } else {
+    // Cross-date 4-cell swap com snapshot idempotency
+    const snapFrom = String(req.turnoRichiedente || '').trim();
+    const snapTo   = String(req.turnoCambio      || '').trim();
+    const reqOnFrom = cellVal(reqRow, fromDay);
+    const cpOnFrom  = cellVal(cpRow,  fromDay);
+    const reqOnTo   = cellVal(reqRow, toDay);
+    const cpOnTo    = cellVal(cpRow,  toDay);
+
+    // Já aplicado: o estado pós-swap bate com o snapshot trocado
+    if (snapFrom && snapTo && cpOnFrom === snapFrom && reqOnTo === snapTo) {
+      return { applied: true, reason: 'already-applied-detected' };
+    }
+    // Sanity check: estado atual deve bater com snapshot original
+    if (snapFrom && snapTo) {
+      if (reqOnFrom !== snapFrom || cpOnTo !== snapTo) {
+        console.warn(`[APPLY-SWAP] Stato incoerente per ${req.id}, salto.`,
+          { fromDay, reqOnFrom, snapFrom, toDay, cpOnTo, snapTo });
+        return { applied: false, reason: 'inconsistent-state' };
+      }
+    }
+    // Scambio simmetrico a 4 celle
+    reqRow['d' + fromDay] = cpOnFrom;
+    cpRow['d'  + fromDay] = reqOnFrom;
+    reqRow['d' + toDay]   = cpOnTo;
+    cpRow['d'  + toDay]   = reqOnTo;
+  }
+
+  // Push no cloud: bulkWrite limpando o mês inteiro e regravando
+  try {
+    await apiCall('bulkWrite', 'Escala', {
+      clearFilter: [
+        { column: 'month', value: targetMonth },
+        { column: 'year',  value: targetYear }
+      ],
+      rows: monthRows
+    });
+  } catch (e) {
+    console.error('[APPLY-SWAP] bulkWrite falhou:', e.message);
+    return { applied: false, reason: 'bulkwrite-failed: ' + e.message };
+  }
+
+  // Atualiza cache e schedule em memória
+  cacheSet('Escala', escalaData);
+  if (currentMonth.getMonth() === m && currentMonth.getFullYear() === y) {
+    parseSchedule(escalaData);
+  }
+
+  return { applied: true, reason: 'ok' };
+}
+
 // ── APPROVE / REJECT ──────────────────────────────────────────
 async function approveRequest(id) {
   showLoading(true);
   try {
+    const req = requests.find(r => String(r.id) === String(id));
+    if (!req) {
+      toast('Richiesta non trovata', 'error');
+      showLoading(false);
+      return;
+    }
+
+    // 1) Aprova na sheet Solicitacoes
     await apiUpdate('Solicitacoes', 'id', id, {
       status: 'approved',
       approvedAt: new Date().toISOString(),
       approvedBy: currentUser.nome
     });
-    const req = requests.find(r => String(r.id) === String(id));
-    if (req) {
-      req.status = 'approved';
-      req.approvedAt = new Date().toISOString();
-      req.approvedBy = currentUser.nome;
+    req.status = 'approved';
+    req.approvedAt = new Date().toISOString();
+    req.approvedBy = currentUser.nome;
+
+    // 2) Se for swap, aplica imediatamente a troca na Escala
+    if (req.type === 'swap') {
+      const result = await applyApprovedSwapMobile(req);
+      if (result.applied) {
+        req.autoApplied = true;
+        toast('Richiesta approvata e turno scambiato!', 'success');
+        // Atualiza calendário se a tela atual mostra
+        if (typeof renderCalendar === 'function') renderCalendar();
+      } else {
+        console.warn('[APPROVE] Swap non applicato:', result.reason);
+        toast('Approvata, ma scambio non applicato: ' + result.reason, 'warning');
+      }
+    } else {
+      toast('Richiesta approvata!', 'success');
     }
+
     cacheSet('Solicitacoes', requests);
     renderRequests();
     updateBadges();
-    toast('Richiesta approvata!', 'success');
   } catch (e) {
     console.error('❌ approveRequest:', e.message);
     toast("Errore durante l'approvazione", 'error');
@@ -2361,12 +2597,20 @@ function openModal(id) {
 
 function closeModal(id) {
   document.getElementById(id).classList.add('hidden');
+  // Se viene chiusa la modale di richiesta, azzera lo stato di editing
+  if (id === 'newReqModal') {
+    editingRequestId = null;
+  }
 }
 
 // Close modal on backdrop click
 document.addEventListener('click', (e) => {
   if (e.target.classList.contains('modal-backdrop')) {
     e.target.classList.add('hidden');
+    // Azzera stato di editing se la modale chiusa è quella delle richieste
+    if (e.target.id === 'newReqModal') {
+      editingRequestId = null;
+    }
   }
 });
 

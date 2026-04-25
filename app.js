@@ -113,16 +113,26 @@ let calNurseFilter = 'all'; // filtro de funcionário no calendário (admin)
 let editingRequestId = null; // ID della richiesta in modifica (null = nuova richiesta)
 
 // ── HELPERS: Normalizar dados do Sheet ───────────────────────
-// O Sheet usa colunas ID_Funcionario / Nome, mas o app interno usa id / name
-function getNurseId(n) { return n.id || n.ID_Funcionario || n.Id || n.ID || ''; }
-function getNurseName(n) { return n.name || n.Nome || n.nome || n.Name || ''; }
+// Schema novo: id, nome, attivo, dataInicio, dataFim, cargaSemanal, notas
+// Schema antigo: ID_Funcionario, Nome, Turno_Padrao, Carga_Horaria_Mensal (mantido por retrocompat)
+function getNurseId(n)   { return n.id || n.ID_Funcionario || n.Id || n.ID || ''; }
+function getNurseName(n) { return n.nome || n.name || n.Nome || n.Name || ''; }
+function isNurseActive(n) {
+  // Default = ativo. Só inativa se explicitamente attivo === 0 / "0" / false / "false" / "FALSE"
+  if (n.attivo === undefined || n.attivo === null || n.attivo === '') return true;
+  const v = String(n.attivo).trim().toLowerCase();
+  return !(v === '0' || v === 'false' || v === 'no');
+}
 function normalizeNurses(rawList) {
   return rawList.map(n => ({
     id: String(getNurseId(n)),
     name: getNurseName(n),
     initials: (getNurseName(n)).split(' ').map(w => w[0]).join('').substring(0,2).toUpperCase(),
-    nightQuota: n.nightQuota || n.Carga_Horaria_Mensal || 5
-  })).filter(n => n.id && n.name);
+    nightQuota: n.cargaSemanal || n.nightQuota || n.Carga_Horaria_Mensal || 5,
+    attivo: isNurseActive(n),
+    dataInicio: n.dataInicio || '',
+    dataFim: n.dataFim || ''
+  })).filter(n => n.id && n.name && n.attivo && n.id !== 'n0'); // exclui Coordinatrice e inativas
 }
 
 // ── INIT ──────────────────────────────────────────────────────
@@ -401,7 +411,8 @@ async function ensureSheetSetup() {
   // Ensure the required sheets exist — NÃO toca em Funcionarios (já existe com seus próprios headers)
   try {
     await apiCall('setupHeaders', 'Usuarios', { headers: ['id', 'nome', 'senha', 'role', 'nurseId'] });
-    await apiCall('setupHeaders', 'Solicitacoes', { headers: ['id', 'type', 'status', 'nurseId', 'nurseName', 'nursecambio', 'nurseIdcambio', 'startDate', 'endDate', 'desc', 'swapNurseId', 'swapNurseName', 'createdAt', 'approvedAt', 'approvedBy'] });
+    await apiCall('setupHeaders', 'Solicitacoes', { headers: ['id', 'type', 'status', 'nurseId', 'nurseName', 'nurseIdcambio', 'nursecambio', 'startDate', 'endDate', 'dataRichiedente', 'dataCambio', 'turnoRichiedente', 'turnoCambio', 'desc', 'autoApplied', 'createdAt', 'approvedAt', 'approvedBy'] });
+    await apiCall('setupHeaders', 'Funcionarios', { headers: ['id', 'nome', 'attivo', 'dataInicio', 'dataFim', 'cargaSemanal', 'notas'] });
     await apiCall('setupHeaders', 'Escala', { headers: ['nurseId', 'month', 'year', 'd1','d2','d3','d4','d5','d6','d7','d8','d9','d10','d11','d12','d13','d14','d15','d16','d17','d18','d19','d20','d21','d22','d23','d24','d25','d26','d27','d28','d29','d30','d31'] });
   } catch (e) {
     console.warn('Sheet setup:', e);
@@ -1473,17 +1484,10 @@ function renderRequests() {
     const personName = req.nurseName || '';
     const initials = personName.split(' ').map(w => w[0]).join('').substring(0, 2).toUpperCase();
 
-    // Build card sections
-    // Swap partner info — fallback: nursecambio from Google Sheets
+    // Build card sections — swap layout em 2 colunas (quem cede o quê)
     const swapPartner = req.swapNurseName || req.nursecambio || req.toNurseName || '';
     let swapHtml = '';
     if (req.type === 'swap' && swapPartner) {
-      swapHtml = `
-      <div class="req-card-swap">
-        <span class="swap-icon">🔄</span>
-        <span class="swap-text">Cambio con <strong>${swapPartner}</strong></span>
-      </div>`;
-      // Cross-date: mostra riga di dettaglio con turni (cede / riceve)
       const fromRaw = req.dataRichiedente || req.startDate || '';
       const toRaw   = req.dataCambio      || req.startDate || '';
       const isCross = fromRaw && toRaw && fromRaw !== toRaw;
@@ -1491,22 +1495,44 @@ function renderRequests() {
       const toShiftCode   = req.turnoCambio      || req.toShift   || '';
       const fromShiftName = SHIFTS[fromShiftCode]?.name || fromShiftCode || '';
       const toShiftName   = SHIFTS[toShiftCode]?.name   || toShiftCode   || '';
+      const fromDateStr = fromRaw ? formatDate(fromRaw) : '';
+      const toDateStr   = toRaw   ? formatDate(toRaw)   : '';
+
       if (isCross) {
-        swapHtml += `
-      <div class="req-card-swap" style="margin-top:6px;">
-        <span class="swap-icon">📤</span>
-        <span class="swap-text">Cede <strong>${formatDate(fromRaw)}</strong>${fromShiftName ? ' — ' + fromShiftName : ''}</span>
-      </div>
-      <div class="req-card-swap" style="margin-top:4px;">
-        <span class="swap-icon">📥</span>
-        <span class="swap-text">Riceve <strong>${formatDate(toRaw)}</strong>${toShiftName ? ' — ' + toShiftName : ''}</span>
-      </div>`;
-      } else if (fromShiftName && toShiftName) {
-        swapHtml += `
-      <div class="req-card-swap" style="margin-top:6px;">
-        <span class="swap-icon">🔃</span>
-        <span class="swap-text">${fromShiftName} ➔ ${toShiftName}</span>
-      </div>`;
+        swapHtml = `
+        <div class="req-swap-summary">
+          <div class="req-swap-grid">
+            <div class="req-swap-side">
+              <div class="swap-side-label">${personName}</div>
+              <div class="swap-side-info">📅 ${fromDateStr}</div>
+              <div class="swap-side-info">⏰ ${fromShiftName || '—'}</div>
+            </div>
+            <div class="req-swap-arrow">⇄</div>
+            <div class="req-swap-side">
+              <div class="swap-side-label">${swapPartner}</div>
+              <div class="swap-side-info">📅 ${toDateStr}</div>
+              <div class="swap-side-info">⏰ ${toShiftName || '—'}</div>
+            </div>
+          </div>
+        </div>`;
+      } else {
+        // Same-date: troca turnos no mesmo dia
+        const dateLabel = fromDateStr || toDateStr || '';
+        swapHtml = `
+        <div class="req-swap-summary">
+          ${dateLabel ? `<div class="req-swap-header"><span>📅</span><strong>${dateLabel}</strong></div>` : ''}
+          <div class="req-swap-grid">
+            <div class="req-swap-side">
+              <div class="swap-side-label">${personName}</div>
+              <div class="swap-side-info">⏰ ${fromShiftName || '—'}</div>
+            </div>
+            <div class="req-swap-arrow">⇄</div>
+            <div class="req-swap-side">
+              <div class="swap-side-label">${swapPartner}</div>
+              <div class="swap-side-info">⏰ ${toShiftName || '—'}</div>
+            </div>
+          </div>
+        </div>`;
       }
     }
 
@@ -1963,7 +1989,12 @@ async function submitNewRequest() {
 // Idempotente: usa snapshot turnoRichiedente/turnoCambio para detectar reaplicação.
 async function applyApprovedSwapMobile(req) {
   if (!req || req.type !== 'swap') return { applied: false, reason: 'not-swap' };
-  if (req.autoApplied === true)    return { applied: false, reason: 'already-applied' };
+  // Idempotência: aceita boolean true OU string 'TRUE' vinda do cloud
+  if (req.autoApplied === true) return { applied: false, reason: 'already-applied' };
+  if (typeof req.autoApplied === 'string' && req.autoApplied.trim().toUpperCase() === 'TRUE') {
+    req.autoApplied = true;
+    return { applied: false, reason: 'already-applied-cloud' };
+  }
 
   const nurseId     = String(req.nurseId || req.fromNurseId || '').trim();
   const swapNurseId = String(req.nurseIdcambio || req.swapNurseId || req.toNurseId || '').trim();
@@ -2090,6 +2121,12 @@ async function approveRequest(id) {
       const result = await applyApprovedSwapMobile(req);
       if (result.applied) {
         req.autoApplied = true;
+        // Persiste flag no cloud para que o Web App Local não tente aplicar de novo
+        try {
+          await apiUpdate('Solicitacoes', 'id', id, { autoApplied: 'TRUE' });
+        } catch (e) {
+          console.warn('[APPROVE] Não conseguiu marcar autoApplied no cloud:', e.message);
+        }
         toast('Richiesta approvata e turno scambiato!', 'success');
         // Atualiza calendário se a tela atual mostra
         if (typeof renderCalendar === 'function') renderCalendar();

@@ -375,10 +375,19 @@
                 <label id="reqDateLabel">Data Inizio</label>
                 <input type="date" id="reqStartDate" class="form-input" onchange="onReqDateChange()">
             </div>
-            <!-- Solo swap: turno del richiedente alla data scelta -->
+            <!-- Solo swap: turno del richiedente alla data scelta (selezionabile) -->
             <div class="form-field" id="reqFromShiftField" style="display:none">
                 <label>Il tuo turno in questa data</label>
-                <input type="text" id="reqFromShiftDisplay" class="form-input" readonly>
+                <select id="reqFromShiftSelect" class="form-select">
+                    <option value="OFF">OFF — Riposo</option>
+                    <option value="M1">M1 — Mattina 1</option>
+                    <option value="M2">M2 — Mattina 2</option>
+                    <option value="MF">MF — Mattina Festivo</option>
+                    <option value="G">G — Giornata</option>
+                    <option value="P">P — Pomeriggio</option>
+                    <option value="PF">PF — Pomeriggio Festivo</option>
+                    <option value="N">N — Notte</option>
+                </select>
             </div>
             <div class="form-field" id="reqEndField">
                 <label>Data Fine</label>
@@ -393,10 +402,19 @@
                 <label>Data della controparte</label>
                 <input type="date" id="reqSwapDate" class="form-input" onchange="onReqSwapDateChange()">
             </div>
-            <!-- Solo swap: turno della controparte nella sua data -->
+            <!-- Solo swap: turno della controparte nella sua data (selezionabile) -->
             <div class="form-field" id="reqToShiftField" style="display:none">
                 <label>Il suo turno nella data</label>
-                <input type="text" id="reqToShiftDisplay" class="form-input" readonly>
+                <select id="reqToShiftSelect" class="form-select">
+                    <option value="OFF">OFF — Riposo</option>
+                    <option value="M1">M1 — Mattina 1</option>
+                    <option value="M2">M2 — Mattina 2</option>
+                    <option value="MF">MF — Mattina Festivo</option>
+                    <option value="G">G — Giornata</option>
+                    <option value="P">P — Pomeriggio</option>
+                    <option value="PF">PF — Pomeriggio Festivo</option>
+                    <option value="N">N — Notte</option>
+                </select>
             </div>
             <div class="form-field">
                 <label>Note (opzionale)</label>

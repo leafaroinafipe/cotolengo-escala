@@ -18,11 +18,12 @@
     <!-- PWA Manifest -->
     <link rel="manifest" href="manifest.json">
     
-    <!-- Icons (Fixed paths) -->
+    <!-- Icons -->
+    <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
     <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
     <link rel="icon" type="image/png" sizes="512x512" href="icon-512.png">
-    <link rel="apple-touch-icon" sizes="192x192" href="icon-192.png">
-    <link rel="apple-touch-icon" sizes="512x512" href="icon-512.png">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
     
     <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -33,14 +34,6 @@
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-
-<!-- ═══════════════════ INSTALL TOP BAR (sempre no topo absoluto) ═══════════════════ -->
-<div id="installTopBar" class="install-top-bar" style="display:none;">
-    <span class="install-top-bar-icon">📲</span>
-    <span class="install-top-bar-text">Installa l'app sul tuo dispositivo per un accesso più rapido</span>
-    <button class="install-top-bar-btn" onclick="installApp()">Installa</button>
-    <button class="install-top-bar-close" onclick="dismissInstallTopBar()" aria-label="Chiudi">✕</button>
-</div>
 
 <!-- ═══════════════════ TOAST CONTAINER ═══════════════════ -->
 <div id="toastContainer" class="toast-container"></div>
@@ -73,15 +66,6 @@
         <div class="orb orb-3"></div>
     </div>
     
-    <!-- Install Button (top right of login screen) -->
-    <button id="loginInstallBtn" class="login-install-btn" onclick="installApp()" style="display:none;" aria-label="Installa app">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-            <polyline points="7 10 12 15 17 10"/>
-            <line x1="12" y1="15" x2="12" y2="3"/>
-        </svg>
-        <span>Installa</span>
-    </button>
     <div class="login-container">
         <div class="login-card">
             <div class="login-header">
@@ -144,22 +128,6 @@
             </div>
         </div>
         <p class="login-footer">v2.0 — Sistema di Gestione del Personale</p>
-    </div>
-    
-    <!-- Install Banner (appears at bottom of login) -->
-    <div id="loginInstallBanner" class="login-install-banner">
-        <div class="banner-icon">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <rect x="5" y="2" width="14" height="20" rx="2" ry="2"/>
-                <line x1="12" y1="18" x2="12.01" y2="18"/>
-            </svg>
-        </div>
-        <div class="banner-text">
-            <strong>Installa l'app</strong>
-            <span>Accesso rapido dalla Home</span>
-        </div>
-        <button class="banner-btn" onclick="installApp()">Installa</button>
-        <button class="banner-close" onclick="dismissInstallBanner()" aria-label="Chiudi">✕</button>
     </div>
 </div>
 
@@ -527,7 +495,6 @@
             <button class="modal-close" onclick="closeModal('pwaInstallModal')" aria-label="Chiudi">✕</button>
         </div>
         <div class="modal-body">
-            <!-- App Preview -->
             <div class="install-preview">
                 <img src="icon-192.png" alt="Cottolengo Turni" class="install-preview-icon">
                 <div class="install-preview-text">
@@ -535,81 +502,86 @@
                     <span>Gestione dei turni</span>
                 </div>
             </div>
-            
-            <p class="install-benefits">
-                ✨ Accesso rapido dalla schermata Home<br>
-                ⚡ Apertura istantanea come un'app nativa<br>
-                📴 Funziona anche offline<br>
-                🔔 Notifiche dei turni
-            </p>
-            
-            <!-- iOS Instructions -->
-            <div class="install-platform" id="installIOS">
+
+            <!-- Browser warning (in-app browser detected) -->
+            <div id="installBrowserWarning" class="install-warning" style="display:none;">
+                ⚠️ <strong>Stai usando un browser interno</strong> (WhatsApp/Instagram/Facebook).
+                Per installare l'app devi prima aprirla nel browser principale del telefono.
+                <br><br>
+                Tocca i tre puntini in alto e scegli <strong>"Apri in Safari"</strong> (iPhone) oppure <strong>"Apri in Chrome"</strong> (Android).
+            </div>
+
+            <!-- iOS Safari Instructions -->
+            <div class="install-platform" id="installIOS" style="display:none;">
                 <div class="install-platform-header">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M17.05 20.28c-.98.95-2.05.8-3.08.35-1.09-.46-2.09-.48-3.24 0-1.44.62-2.2.44-3.06-.35C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09l.01-.01zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z"/>
-                    </svg>
-                    <strong>Su iPhone / iPad (Safari)</strong>
+                    <strong>📱 Su iPhone / iPad</strong>
                 </div>
+                <p style="font-size:13px; color:var(--text-muted); margin:6px 0 12px;">
+                    Funziona solo aprendo l'app dentro <strong>Safari</strong>.
+                </p>
                 <ol class="install-steps">
                     <li>
                         <div class="step-num">1</div>
                         <div class="step-text">
-                            Tocca l'icona <span class="share-icon">
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                    <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/>
-                                    <polyline points="16 6 12 2 8 6"/>
-                                    <line x1="12" y1="2" x2="12" y2="15"/>
-                                </svg>
-                            </span> <strong>Condividi</strong> nella barra inferiore
+                            Tocca il pulsante <strong>Condividi</strong>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle; margin:0 2px;">
+                                <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/>
+                            </svg>
+                            (quadrato con freccia in su) nella barra in basso.
                         </div>
                     </li>
                     <li>
                         <div class="step-num">2</div>
                         <div class="step-text">
-                            Scorri e seleziona <strong>"Aggiungi a Home"</strong>
+                            Scorri verso il basso e tocca <strong>"Aggiungi a Home"</strong>.
                         </div>
                     </li>
                     <li>
                         <div class="step-num">3</div>
                         <div class="step-text">
-                            Tocca <strong>"Aggiungi"</strong> in alto a destra
+                            Tocca <strong>"Aggiungi"</strong> in alto a destra.
+                            L'icona apparirà sulla tua schermata Home.
                         </div>
                     </li>
                 </ol>
             </div>
-            
-            <!-- Android Instructions -->
-            <div class="install-platform" id="installAndroid">
+
+            <!-- Android Chrome Instructions -->
+            <div class="install-platform" id="installAndroid" style="display:none;">
                 <div class="install-platform-header">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M6 18c0 .55.45 1 1 1h1v3.5c0 .83.67 1.5 1.5 1.5s1.5-.67 1.5-1.5V19h2v3.5c0 .83.67 1.5 1.5 1.5s1.5-.67 1.5-1.5V19h1c.55 0 1-.45 1-1V8H6v10zM3.5 8C2.67 8 2 8.67 2 9.5v7c0 .83.67 1.5 1.5 1.5S5 17.33 5 16.5v-7C5 8.67 4.33 8 3.5 8zm17 0c-.83 0-1.5.67-1.5 1.5v7c0 .83.67 1.5 1.5 1.5s1.5-.67 1.5-1.5v-7c0-.83-.67-1.5-1.5-1.5zm-4.97-5.84l1.3-1.3c.2-.2.2-.51 0-.71-.2-.2-.51-.2-.71 0l-1.48 1.48C13.85 1.23 12.95 1 12 1c-.96 0-1.86.23-2.66.63L7.85.15c-.2-.2-.51-.2-.71 0-.2.2-.2.51 0 .71l1.31 1.31C6.97 3.26 6 5.01 6 7h12c0-1.99-.97-3.75-2.47-4.84zM10 5H9V4h1v1zm5 0h-1V4h1v1z"/>
-                    </svg>
-                    <strong>Su Android (Chrome)</strong>
+                    <strong>🤖 Su Android</strong>
                 </div>
+                <p style="font-size:13px; color:var(--text-muted); margin:6px 0 12px;">
+                    Apri l'app dentro <strong>Chrome</strong> (o Edge / Samsung Internet).
+                </p>
                 <ol class="install-steps">
                     <li>
                         <div class="step-num">1</div>
                         <div class="step-text">
-                            Tocca il menu <strong>⋮</strong> in alto a destra
+                            Tocca i <strong>tre puntini</strong> ⋮ in alto a destra del browser
+                            (NON dell'app — sono i puntini di Chrome).
                         </div>
                     </li>
                     <li>
                         <div class="step-num">2</div>
                         <div class="step-text">
-                            Seleziona <strong>"Installa app"</strong> o <strong>"Aggiungi a schermata Home"</strong>
+                            Tocca <strong>"Installa app"</strong> o <strong>"Aggiungi alla schermata Home"</strong>.
                         </div>
                     </li>
                     <li>
                         <div class="step-num">3</div>
                         <div class="step-text">
-                            Conferma toccando <strong>"Installa"</strong>
+                            Conferma con <strong>"Installa"</strong>.
+                            L'icona apparirà tra le tue app.
                         </div>
                     </li>
                 </ol>
+                <p style="font-size:12px; color:var(--text-muted); margin-top:10px; padding:8px; background:rgba(139,92,246,0.08); border-radius:8px;">
+                    💡 Se non vedi <em>"Installa app"</em>, prova a usare l'app per qualche secondo (scrolla, tocca qualcosa) e riprova — Chrome aspetta interazione prima di abilitare l'installazione.
+                </p>
             </div>
-            
-            <button class="form-submit" style="margin-top: 8px;" onclick="closeModal('pwaInstallModal')">Ho capito! 👍</button>
+
+            <button class="form-submit" style="margin-top: 12px;" onclick="closeModal('pwaInstallModal')">Ho capito 👍</button>
         </div>
     </div>
 </div>

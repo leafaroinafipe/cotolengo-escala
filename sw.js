@@ -3,7 +3,7 @@
 //  Cache offline para o PWA — API calls bypass SW completely
 // ============================================================
 
-const CACHE_VERSION = '14';
+const CACHE_VERSION = '15';
 const CACHE_NAME = `cottolengo-escala-${CACHE_VERSION}`;
 const ASSETS = [
   './',
@@ -11,6 +11,10 @@ const ASSETS = [
   './styles.css',
   './app.js',
   './manifest.json',
+  './icon-192.png',
+  './icon-512.png',
+  './apple-touch-icon.png',
+  './favicon-32.png',
   'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap'
 ];
 

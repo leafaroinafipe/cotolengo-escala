@@ -154,114 +154,57 @@ function registerServiceWorker() {
 }
 
 // ============================================================
-// ── PWA INSTALL SYSTEM (iOS + Android) ──────────────────────
+// ── PWA INSTALL SYSTEM (iOS + Android) — versione minimal ──
+// Una sola UI: il pulsante nell'header (visibile dopo il login).
+// Il pulsante prova il prompt nativo (Android Chrome); se non disponibile
+// (iOS Safari, in-app browser, ecc.) apre un modal con istruzioni reali.
 // ============================================================
 
-// Platform detection
-const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+const isIOS     = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
 const isAndroid = /Android/.test(navigator.userAgent);
 
-// Check if already installed as PWA
+// Detect in-app browser (WhatsApp, Instagram, Facebook, ecc.)
+// PWA install è impossibile dentro di questi browser.
+function isInAppBrowser() {
+  const ua = navigator.userAgent || '';
+  return /FBAN|FBAV|Instagram|Line|MicroMessenger|WhatsApp|Snapchat|TikTok|Twitter|LinkedInApp/i.test(ua);
+}
+
 function isStandalone() {
-  return window.navigator.standalone === true || 
+  return window.navigator.standalone === true ||
          window.matchMedia('(display-mode: standalone)').matches ||
          window.matchMedia('(display-mode: fullscreen)').matches ||
          document.referrer.startsWith('android-app://');
 }
 
 let deferredPrompt = null;
-let installPromptReady = false;
 
-// Android: Capture the native install prompt
+// Android Chrome: cattura il prompt nativo
 window.addEventListener('beforeinstallprompt', (e) => {
   e.preventDefault();
   deferredPrompt = e;
-  installPromptReady = true;
-  console.log('✅ PWA install prompt ready (Android)');
+  console.log('✅ PWA install prompt nativo pronto');
   updateInstallUI();
 });
 
-// Detect when app was successfully installed
+// Conferma installazione
 window.addEventListener('appinstalled', () => {
-  console.log('✅ PWA installed successfully');
+  console.log('✅ PWA installata con successo');
   deferredPrompt = null;
-  hideAllInstallUI();
+  updateInstallUI();
   toast('App installata con successo! 🎉', 'success');
-  try { localStorage.removeItem('install_banner_dismissed'); } catch (e) {}
 });
 
-// Show/hide install UI based on platform and state
+// L'unico controllo UI: mostra/nasconde il pulsante nell'header.
 function updateInstallUI() {
+  const btn = document.getElementById('installPwaBtn');
+  if (!btn) return;
   if (isStandalone()) {
-    hideAllInstallUI();
+    btn.style.display = 'none';
     return;
   }
-  // Mostra SEMPRE para iOS (Safari não dispara beforeinstallprompt) e Android.
-  // Em desktop também mostra como fallback (alguns browsers desktop suportam PWA).
-  showInstallButtons();
-  showLoginBanner();
-  showInstallTopBar();
-}
-
-function showInstallButtons() {
-  const headerBtn = document.getElementById('installPwaBtn');
-  if (headerBtn) headerBtn.style.display = 'flex';
-  const loginBtn = document.getElementById('loginInstallBtn');
-  if (loginBtn) loginBtn.style.display = 'flex';
-}
-
-// Mostra a barra superior de instalação. Usa _v3 para invalidar dismissals antigos.
-function showInstallTopBar() {
-  // Limpa flags antigas (v1) automaticamente para usuários existentes
-  try { localStorage.removeItem('install_topbar_dismissed'); } catch (e) {}
-  try { localStorage.removeItem('install_topbar_dismissed_v2'); } catch (e) {}
-
-  let dismissed = false;
-  try {
-    dismissed = localStorage.getItem('install_topbar_dismissed_v3') === 'true';
-  } catch (e) {}
-  if (dismissed) return;
-  const bar = document.getElementById('installTopBar');
-  if (bar) bar.style.display = 'flex';
-}
-
-function dismissInstallTopBar() {
-  try { localStorage.setItem('install_topbar_dismissed_v3', 'true'); } catch (e) {}
-  const bar = document.getElementById('installTopBar');
-  if (bar) bar.style.display = 'none';
-}
-
-function showLoginBanner() {
-  // Limpa flags antigas
-  try { localStorage.removeItem('install_banner_dismissed'); } catch (e) {}
-
-  let dismissed = false;
-  try {
-    dismissed = localStorage.getItem('install_banner_dismissed_v3') === 'true';
-  } catch (e) {}
-  if (dismissed) return;
-
-  const banner = document.getElementById('loginInstallBanner');
-  if (banner) {
-    setTimeout(() => banner.classList.add('visible'), 800);
-  }
-}
-
-function hideAllInstallUI() {
-  const headerBtn = document.getElementById('installPwaBtn');
-  if (headerBtn) headerBtn.style.display = 'none';
-  const loginBtn = document.getElementById('loginInstallBtn');
-  if (loginBtn) loginBtn.style.display = 'none';
-  const banner = document.getElementById('loginInstallBanner');
-  if (banner) banner.classList.remove('visible');
-  const topBar = document.getElementById('installTopBar');
-  if (topBar) topBar.style.display = 'none';
-}
-
-function dismissInstallBanner() {
-  try { localStorage.setItem('install_banner_dismissed_v3', 'true'); } catch (e) {}
-  const banner = document.getElementById('loginInstallBanner');
-  if (banner) banner.classList.remove('visible');
+  // Mostra il pulsante (display:flex per centrare il testo)
+  btn.style.display = 'flex';
 }
 
 function installApp() {
@@ -269,36 +212,60 @@ function installApp() {
     toast('App già installata!', 'info');
     return;
   }
-  // Android Chrome: prompt nativo se disponível
+
+  // 1) Android Chrome con prompt nativo pronto: installazione 1-clic
   if (deferredPrompt && !isIOS) {
     deferredPrompt.prompt();
-    deferredPrompt.userChoice.then((choiceResult) => {
-      if (choiceResult.outcome === 'accepted') {
-        hideAllInstallUI();
+    deferredPrompt.userChoice.then((choice) => {
+      console.log('PWA prompt outcome:', choice.outcome);
+      if (choice.outcome === 'accepted') {
+        toast('Installazione in corso...', 'info');
       }
       deferredPrompt = null;
-      installPromptReady = false;
+      updateInstallUI();
     });
     return;
   }
-  // iOS sempre + Android sem prompt nativo: abre modal com instruções manuais.
-  // O modal contém seções específicas para iOS e Android — ajusto a visibilidade aqui.
+
+  // 2) Tutti gli altri casi: apri modal con istruzioni
   const modal = document.getElementById('pwaInstallModal');
-  if (modal) {
-    const iosSection = document.getElementById('installIOS');
-    const androidSection = document.getElementById('installAndroid');
-    if (iosSection)     iosSection.style.display     = isIOS ? 'block' : (isAndroid ? 'none' : 'block');
-    if (androidSection) androidSection.style.display = isAndroid ? 'block' : (isIOS ? 'none' : 'block');
-    modal.classList.remove('hidden');
+  if (!modal) return;
+
+  const warning    = document.getElementById('installBrowserWarning');
+  const iosSec     = document.getElementById('installIOS');
+  const androidSec = document.getElementById('installAndroid');
+
+  // Reset visibilità
+  if (warning)    warning.style.display    = 'none';
+  if (iosSec)     iosSec.style.display     = 'none';
+  if (androidSec) androidSec.style.display = 'none';
+
+  // In-app browser: non si può installare, mostra solo l'avviso
+  if (isInAppBrowser()) {
+    if (warning) warning.style.display = 'block';
+  } else if (isIOS) {
+    if (iosSec) iosSec.style.display = 'block';
+  } else if (isAndroid) {
+    if (androidSec) androidSec.style.display = 'block';
+  } else {
+    // Desktop o altro: mostra entrambe le sezioni
+    if (iosSec)     iosSec.style.display     = 'block';
+    if (androidSec) androidSec.style.display = 'block';
   }
+
+  modal.classList.remove('hidden');
 }
 
 function initInstallUI() {
-  // Mostra imediatamente (não espera 1.5s)
+  // Pulisce qualsiasi flag dismiss vecchio rimasto in localStorage
+  try {
+    localStorage.removeItem('install_topbar_dismissed');
+    localStorage.removeItem('install_topbar_dismissed_v2');
+    localStorage.removeItem('install_topbar_dismissed_v3');
+    localStorage.removeItem('install_banner_dismissed');
+    localStorage.removeItem('install_banner_dismissed_v3');
+  } catch (e) {}
   updateInstallUI();
-  // E re-verifica após o app carregar, para o caso de o beforeinstallprompt chegar tarde
-  setTimeout(() => updateInstallUI(), 1500);
-  setTimeout(() => updateInstallUI(), 4000);
 }
 
 function togglePassword() {
